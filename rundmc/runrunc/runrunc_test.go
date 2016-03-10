@@ -247,6 +247,24 @@ var _ = Describe("RuncRunner", func() {
 				Expect(spec.Args).To(Equal([]string{"to enlightenment", "infinity", "and beyond"}))
 			})
 
+			It("sets the rlimits correctly", func() {
+				ptr := func(n uint64) *uint64 { return &n }
+				Expect(runner.Exec(logger, "some/oci/container", "someid", garden.ProcessSpec{
+					Limits: garden.ResourceLimits{
+						Nproc: ptr(1234),
+					},
+				}, garden.ProcessIO{})).To(Succeed())
+				Expect(tracker.RunCallCount()).To(Equal(1))
+
+				Expect(spec.Rlimits).To(Equal([]specs.Rlimit{
+					{
+						Type: "RLIMIT_NPROC",
+						Soft: 1234,
+						Hard: 1234,
+					},
+				}))
+			})
+
 			Describe("passing the correct uid and gid", func() {
 				Context("when the bundle can be loaded", func() {
 					BeforeEach(func() {
