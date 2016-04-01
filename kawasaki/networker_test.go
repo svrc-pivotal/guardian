@@ -98,7 +98,7 @@ var _ = Describe("Networker", func() {
 		}
 	})
 
-	Describe("Hook", func() {
+	Describe("Hooks", func() {
 		It("parses the spec", func() {
 			networker.Hooks(logger, "some-handle", "1.2.3.4/30")
 			Expect(fakeSpecParser.ParseCallCount()).To(Equal(1))
@@ -168,30 +168,59 @@ var _ = Describe("Networker", func() {
 			})
 		})
 
-		It("returns the path to the kawasaki binary with the created config as flags", func() {
-			hooks, err := networker.Hooks(logger, "some-handle", "1.2.3.4/30")
-			Expect(err).NotTo(HaveOccurred())
+		FContext("configuring Hooks", func() {
+			var (
+				handle string
+				hooks  gardener.Hooks
+			)
 
-			Expect(hooks.Prestart.Path).To(Equal("/path/to/kawasaki"))
-		})
+			BeforeEach(func() {
+				var err error
 
-		It("passes the config as flags to the binary", func() {
-			hooks, err := networker.Hooks(logger, "some-handle", "1.2.3.4/30")
-			Expect(err).NotTo(HaveOccurred())
+				handle = "some-handle"
+				hooks, err = networker.Hooks(logger, handle, "1.2.3.4/30")
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-			Expect(hooks.Prestart.Args).To(ContainElement("--host-interface=" + networkConfig.HostIntf))
-			Expect(hooks.Prestart.Args).To(ContainElement("--container-interface=" + networkConfig.ContainerIntf))
-			Expect(hooks.Prestart.Args).To(ContainElement("--bridge-interface=" + networkConfig.BridgeName))
-			Expect(hooks.Prestart.Args).To(ContainElement("--bridge-ip=" + networkConfig.BridgeIP.String()))
-			Expect(hooks.Prestart.Args).To(ContainElement("--container-ip=" + networkConfig.ContainerIP.String()))
-			Expect(hooks.Prestart.Args).To(ContainElement("--external-ip=" + networkConfig.ExternalIP.String()))
-			Expect(hooks.Prestart.Args).To(ContainElement("--subnet=" + networkConfig.Subnet.String()))
-			Expect(hooks.Prestart.Args).To(ContainElement("--iptable-instance=" + networkConfig.IPTableInstance))
-			Expect(hooks.Prestart.Args).To(ContainElement("--iptable-prefix=" + networkConfig.IPTablePrefix))
-			Expect(hooks.Prestart.Args).To(ContainElement("--mtu=" + strconv.Itoa(networkConfig.Mtu)))
-			for _, dnsServer := range networkConfig.DNSServers {
-				Expect(hooks.Prestart.Args).To(ContainElement("--dns-server=" + dnsServer.String()))
-			}
+			It("passes the correct args to the prestart hook", func() {
+				Expect(hooks.Prestart.Args).To(ContainElement("--action=create"))
+				Expect(hooks.Prestart.Args).To(ContainElement("--host-interface=" + networkConfig.HostIntf))
+				Expect(hooks.Prestart.Args).To(ContainElement("--container-interface=" + networkConfig.ContainerIntf))
+				Expect(hooks.Prestart.Args).To(ContainElement("--bridge-interface=" + networkConfig.BridgeName))
+				Expect(hooks.Prestart.Args).To(ContainElement("--bridge-ip=" + networkConfig.BridgeIP.String()))
+				Expect(hooks.Prestart.Args).To(ContainElement("--container-ip=" + networkConfig.ContainerIP.String()))
+				Expect(hooks.Prestart.Args).To(ContainElement("--external-ip=" + networkConfig.ExternalIP.String()))
+				Expect(hooks.Prestart.Args).To(ContainElement("--subnet=" + networkConfig.Subnet.String()))
+				Expect(hooks.Prestart.Args).To(ContainElement("--iptable-instance=" + networkConfig.IPTableInstance))
+				Expect(hooks.Prestart.Args).To(ContainElement("--iptable-prefix=" + networkConfig.IPTablePrefix))
+				Expect(hooks.Prestart.Args).To(ContainElement("--mtu=" + strconv.Itoa(networkConfig.Mtu)))
+				for _, dnsServer := range networkConfig.DNSServers {
+					Expect(hooks.Prestart.Args).To(ContainElement("--dns-server=" + dnsServer.String()))
+				}
+			})
+
+			It("passes the correct args to the poststop hook", func() {
+				Expect(hooks.Poststop.Args).To(ContainElement("--handle=" + handle))
+				Expect(hooks.Poststop.Args).To(ContainElement("--action=destroy"))
+				Expect(hooks.Poststop.Args).To(ContainElement("--host-interface=" + networkConfig.HostIntf))
+				Expect(hooks.Poststop.Args).To(ContainElement("--container-interface=" + networkConfig.ContainerIntf))
+				Expect(hooks.Poststop.Args).To(ContainElement("--bridge-interface=" + networkConfig.BridgeName))
+				Expect(hooks.Poststop.Args).To(ContainElement("--bridge-ip=" + networkConfig.BridgeIP.String()))
+				Expect(hooks.Poststop.Args).To(ContainElement("--container-ip=" + networkConfig.ContainerIP.String()))
+				Expect(hooks.Poststop.Args).To(ContainElement("--external-ip=" + networkConfig.ExternalIP.String()))
+				Expect(hooks.Poststop.Args).To(ContainElement("--subnet=" + networkConfig.Subnet.String()))
+				Expect(hooks.Poststop.Args).To(ContainElement("--iptable-instance=" + networkConfig.IPTableInstance))
+				Expect(hooks.Poststop.Args).To(ContainElement("--iptable-prefix=" + networkConfig.IPTablePrefix))
+				Expect(hooks.Poststop.Args).To(ContainElement("--mtu=" + strconv.Itoa(networkConfig.Mtu)))
+				for _, dnsServer := range networkConfig.DNSServers {
+					Expect(hooks.Poststop.Args).To(ContainElement("--dns-server=" + dnsServer.String()))
+				}
+			})
+
+			It("returns the path to the kawasaki binary", func() {
+				Expect(hooks.Prestart.Path).To(Equal("/path/to/kawasaki"))
+				Expect(hooks.Poststop.Path).To(Equal("/path/to/kawasaki"))
+			})
 		})
 	})
 

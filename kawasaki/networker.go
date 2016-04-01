@@ -128,7 +128,7 @@ func New(
 	}
 }
 
-// Hook provides path and appropriate arguments to the kawasaki executable that
+// Hooks provides path and appropriate arguments to the kawasaki executable that
 // applies the network configuration after the network namesapce creation.
 func (n *Networker) Hooks(log lager.Logger, handle, spec string) (gardener.Hooks, error) {
 	log = log.Session("network", lager.Data{
@@ -173,15 +173,27 @@ func (n *Networker) Hooks(log lager.Logger, handle, spec string) (gardener.Hooks
 		fmt.Sprintf("--iptable-prefix=%s", config.IPTablePrefix),
 		fmt.Sprintf("--iptable-instance=%s", config.IPTableInstance),
 	}
-
 	for _, dnsServer := range config.DNSServers {
 		args = append(args, fmt.Sprintf("--dns-server=%s", dnsServer.String()))
 	}
 
+	preStartArgs := append([]string{
+		"--action=create",
+	}, args...)
+
+	postStopArgs := append([]string{
+		fmt.Sprintf("--action=destroy"),
+		fmt.Sprintf("--handle=%s", handle),
+	}, args...)
+
 	return gardener.Hooks{
 		Prestart: gardener.Hook{
 			Path: n.kawasakiBinPath,
-			Args: args,
+			Args: preStartArgs,
+		},
+		Poststop: gardener.Hook{
+			Path: n.kawasakiBinPath,
+			Args: postStopArgs,
 		},
 	}, nil
 }
