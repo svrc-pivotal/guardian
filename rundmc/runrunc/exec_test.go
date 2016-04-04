@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/cloudfoundry-incubator/goci"
+	"github.com/cloudfoundry-incubator/guardian/rundmc/process_tracker"
 	"github.com/cloudfoundry-incubator/guardian/rundmc/runrunc"
 	"github.com/cloudfoundry-incubator/guardian/rundmc/runrunc/fakes"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
@@ -79,6 +80,7 @@ var _ = Describe("Exec", func() {
 
 	It("runs exec against the injected runC binary using process tracker", func() {
 		pidGenerator.GenerateReturns("another-process-guid")
+		tracker.RunReturns(&process_tracker.Process{}, nil)
 		ttyspec := &garden.TTYSpec{WindowSize: &garden.WindowSize{Rows: 1}}
 		runner.Exec(logger, bundlePath, "some-id", garden.ProcessSpec{TTY: ttyspec}, garden.ProcessIO{Stdout: GinkgoWriter})
 		Expect(tracker.RunCallCount()).To(Equal(1))
@@ -91,6 +93,7 @@ var _ = Describe("Exec", func() {
 	})
 
 	It("creates the processes directory if it does not exist", func() {
+		tracker.RunReturns(&process_tracker.Process{}, nil)
 		runner.Exec(logger, bundlePath, "some-id", garden.ProcessSpec{}, garden.ProcessIO{Stdout: GinkgoWriter})
 		Expect(path.Join(bundlePath, "processes")).To(BeADirectory())
 	})
@@ -105,6 +108,7 @@ var _ = Describe("Exec", func() {
 
 	It("asks for the pid file to be placed in processes/$guid.pid", func() {
 		pidGenerator.GenerateReturns("another-process-guid")
+		tracker.RunReturns(&process_tracker.Process{}, nil)
 		runner.Exec(logger, bundlePath, "some-id", garden.ProcessSpec{}, garden.ProcessIO{Stdout: GinkgoWriter})
 		Expect(tracker.RunCallCount()).To(Equal(1))
 
@@ -114,6 +118,7 @@ var _ = Describe("Exec", func() {
 
 	It("tells process tracker that it can find the pid-file at processes/$guid.pid", func() {
 		pidGenerator.GenerateReturns("another-process-guid")
+		tracker.RunReturns(&process_tracker.Process{}, nil)
 		runner.Exec(logger, bundlePath, "some-id", garden.ProcessSpec{}, garden.ProcessIO{Stdout: GinkgoWriter})
 		Expect(tracker.RunCallCount()).To(Equal(1))
 
@@ -130,7 +135,7 @@ var _ = Describe("Exec", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				json.NewDecoder(f).Decode(&spec)
-				return nil, nil
+				return &process_tracker.Process{}, nil
 			}
 		})
 
@@ -142,7 +147,7 @@ var _ = Describe("Exec", func() {
 
 		It("sets the rlimits correctly", func() {
 			ptr := func(n uint64) *uint64 { return &n }
-			Expect(runner.Exec(logger, "some/oci/container", "someid", garden.ProcessSpec{
+			_, err := runner.Exec(logger, "some/oci/container", "someid", garden.ProcessSpec{
 				Limits: garden.ResourceLimits{
 					As:         ptr(12),
 					Core:       ptr(24),
@@ -160,7 +165,9 @@ var _ = Describe("Exec", func() {
 					Sigpending: ptr(101),
 					Stack:      ptr(44),
 				},
-			}, garden.ProcessIO{})).To(Succeed())
+			}, garden.ProcessIO{})
+
+			Expect(err).ToNot(HaveOccurred())
 			Expect(tracker.RunCallCount()).To(Equal(1))
 
 			Expect(spec.Rlimits).To(ConsistOf(

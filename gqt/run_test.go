@@ -1,6 +1,7 @@
 package gqt_test
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -18,10 +19,15 @@ import (
 	"github.com/onsi/gomega/types"
 )
 
-var _ = Describe("Run", func() {
+var _ = FDescribe("Run", func() {
 	var client *runner.RunningGarden
 
 	AfterEach(func() {
+		// Ensure we don't leak process.json files
+		matches, err := filepath.Glob(fmt.Sprintf("%s/guardianprocess*", client.Tmpdir))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(len(matches)).To(Equal(0))
+
 		Expect(client.DestroyAndStop()).To(Succeed())
 	})
 
@@ -48,7 +54,7 @@ var _ = Describe("Run", func() {
 			}
 		},
 
-		Entry("with an absolute path",
+		FEntry("with an absolute path",
 			spec("/bin/sh", "-c", "echo hello; exit 12"),
 			should(gbytes.Say("hello"), gexec.Exit(12)),
 		),
