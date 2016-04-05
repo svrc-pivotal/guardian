@@ -149,6 +149,23 @@ var _ = Describe("Net", func() {
 			Expect(out).To(ContainSubstring(" 0% packet loss"))
 		})
 
+		Context("when starting a container using runC after it has been killed", func() {
+			FIt("works", func() {
+				sess, err := gexec.Start(exec.Command("runc", "kill", container.Handle(), "KILL"), GinkgoWriter, GinkgoWriter)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(sess).Should(gexec.Exit(0))
+
+				cmd := exec.Command("runc", "start", container.Handle(), "-d")
+				containerInfo, err := container.Info()
+				Expect(err).NotTo(HaveOccurred())
+				cmd.Dir = containerInfo.ContainerPath
+
+				sess, err = gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(sess).Should(gexec.Exit(0))
+			})
+		})
+
 		Context("a second container", func() {
 			var originContainer garden.Container
 

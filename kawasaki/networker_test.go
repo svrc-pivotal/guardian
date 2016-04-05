@@ -168,7 +168,7 @@ var _ = Describe("Networker", func() {
 			})
 		})
 
-		FContext("configuring Hooks", func() {
+		Context("configuring Hooks", func() {
 			var (
 				handle string
 				hooks  gardener.Hooks
