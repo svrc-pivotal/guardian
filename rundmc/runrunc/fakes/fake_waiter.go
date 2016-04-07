@@ -11,7 +11,7 @@ type FakeWaiter struct {
 	WaitStub        func() (int, error)
 	waitMutex       sync.RWMutex
 	waitArgsForCall []struct{}
-	waitReturns     struct {
+	waitReturns struct {
 		result1 int
 		result2 error
 	}

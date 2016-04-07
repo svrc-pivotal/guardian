@@ -11,31 +11,31 @@ type FakeMetrics struct {
 	NumCPUStub        func() int
 	numCPUMutex       sync.RWMutex
 	numCPUArgsForCall []struct{}
-	numCPUReturns     struct {
+	numCPUReturns struct {
 		result1 int
 	}
 	NumGoroutineStub        func() int
 	numGoroutineMutex       sync.RWMutex
 	numGoroutineArgsForCall []struct{}
-	numGoroutineReturns     struct {
+	numGoroutineReturns struct {
 		result1 int
 	}
 	LoopDevicesStub        func() int
 	loopDevicesMutex       sync.RWMutex
 	loopDevicesArgsForCall []struct{}
-	loopDevicesReturns     struct {
+	loopDevicesReturns struct {
 		result1 int
 	}
 	BackingStoresStub        func() int
 	backingStoresMutex       sync.RWMutex
 	backingStoresArgsForCall []struct{}
-	backingStoresReturns     struct {
+	backingStoresReturns struct {
 		result1 int
 	}
 	DepotDirsStub        func() int
 	depotDirsMutex       sync.RWMutex
 	depotDirsArgsForCall []struct{}
-	depotDirsReturns     struct {
+	depotDirsReturns struct {
 		result1 int
 	}
 }

@@ -82,18 +82,18 @@ func (e *Execer) Exec(log lager.Logger, bundlePath, id string, spec garden.Proce
 }
 
 type ExecRunner struct {
-	pidGenerator       UidGenerator
-	runc               RuncBinary
-	tracker            ProcessTracker
-	processJsonCleaner Cleaner
+	pidGenerator UidGenerator
+	runc         RuncBinary
+	tracker      ProcessTracker
+	waitWatcher  WaitWatcher
 }
 
-func NewExecRunner(pidGen UidGenerator, runc RuncBinary, tracker ProcessTracker, processJsonCleaner Cleaner) *ExecRunner {
+func NewExecRunner(pidGen UidGenerator, runc RuncBinary, tracker ProcessTracker, waitWatcher WaitWatcher) *ExecRunner {
 	return &ExecRunner{
-		pidGenerator:       pidGen,
-		runc:               runc,
-		tracker:            tracker,
-		processJsonCleaner: processJsonCleaner,
+		pidGenerator: pidGen,
+		runc:         runc,
+		tracker:      tracker,
+		waitWatcher:  waitWatcher,
 	}
 }
 
@@ -131,7 +131,7 @@ func (e *ExecRunner) Run(log lager.Logger, spec *specs.Process, processesPath, i
 		return nil, err
 	}
 
-	go e.processJsonCleaner.Clean(log, process, processJson.Name())
+	go e.waitWatcher.OnExit(log, process, RemoveFiles([]string{processJson.Name(), pidFilePath}))
 
 	return process, nil
 }
@@ -232,17 +232,19 @@ type Waiter interface {
 	Wait() (int, error)
 }
 
-//go:generate counterfeiter . Cleaner
-type Cleaner interface {
-	Clean(log lager.Logger, process Waiter, path string)
+type Runner interface {
+	Run(log lager.Logger)
 }
 
-type ProcessJsonCleaner struct{}
+//go:generate counterfeiter . WaitWatcher
+type WaitWatcher interface { // get it??
+	OnExit(log lager.Logger, process Waiter, onExit Runner)
+}
 
-func (ProcessJsonCleaner) Clean(log lager.Logger, process Waiter, path string) {
-	process.Wait()
+type RemoveFiles []string
 
-	if err := os.Remove(path); err != nil {
+func (files RemoveFiles) Run(log lager.Logger) {
+	if err := os.Remove(files[0]); err != nil {
 		log.Error("cleanup-process-json-failed", err)
 	}
 }
