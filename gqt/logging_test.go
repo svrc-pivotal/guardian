@@ -31,5 +31,8 @@ var _ = FDescribe("Logging", func() {
 
 	It("forwards RunC logs", func() {
 		Eventually(client, "1s").Should(gbytes.Say("guardian-runc-logging-test-start"))
+		Eventually(client, "1s").Should(gbytes.Say("peshod"))
+		Eventually(client, "1s").Should(gbytes.Say("peshoi"))
+		Eventually(client, "1s").Should(gbytes.Say("peshow"))
 	})
 })
