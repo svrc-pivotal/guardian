@@ -101,11 +101,12 @@ type GuardianCommand struct {
 
 	Bin struct {
 		IODaemon FileFlag `long:"iodaemon-bin" required:"true" description:"Path to the 'iodaemon' binary."`
-		Dadoo    FileFlag `long:"dadoo-bin" required:"true" description:"Path to the 'dadoo' binary."`
+		Dadoo    FileFlag `long:"dadoo-bin"    required:"true" description:"Path to the 'dadoo' binary."`
 		NSTar    FileFlag `long:"nstar-bin"    required:"true" description:"Path to the 'nstar' binary."`
 		Tar      FileFlag `long:"tar-bin"      required:"true" description:"Path to the 'tar' binary."`
 		Kawasaki FileFlag `long:"kawasaki-bin" required:"true" description:"Path to the 'kawasaki' network hook binary."`
 		Init     FileFlag `long:"init-bin"     required:"true" description:"Path execute as pid 1 inside each container."`
+		Runc     FileFlag `long:"runc-bin"     required:"true" description:"Path to the 'runc' binary."`
 	} `group:"Binary Tools"`
 
 	Graph struct {
@@ -442,13 +443,15 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, iodae
 		SleepInterval: time.Millisecond * 100,
 	}
 
+	fmt.Printf("RUNCBINARYPATH: %s\n", cmd.Bin.Runc.Path())
+	fmt.Printf("RUNCBINARY: %s\n", cmd.Bin.Runc)
 	runcrunner := runrunc.New(
 		commandRunner,
 		runrunc.NewLogRunner(commandRunner, runrunc.LogDir(os.TempDir()).GenerateLogFile),
-		goci.RuncBinary("runc"),
+		goci.RuncBinary(cmd.Bin.Runc.Path()),
 		dadooPath,
 		runrunc.NewExecPreparer(&goci.BndlLoader{}, runrunc.LookupFunc(runrunc.LookupUser), chrootMkdir),
-		runrunc.NewExecRunner(cmd.wireUidGenerator(), goci.RuncBinary("runc"),
+		runrunc.NewExecRunner(cmd.wireUidGenerator(), goci.RuncBinary(cmd.Bin.Runc.Path()),
 			process_tracker.New(path.Join(os.TempDir(), fmt.Sprintf("garden-%s", cmd.Server.Tag), "processes"), iodaemonPath, commandRunner, pidFileReader),
 			&runrunc.ProcessJsonCleaner{}),
 	)
