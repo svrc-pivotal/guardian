@@ -10,7 +10,7 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
-var _ = FDescribe("Logging", func() {
+var _ = Describe("Logging", func() {
 
 	Context("when a container is created", func() {
 		var (
