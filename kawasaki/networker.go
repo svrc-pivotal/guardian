@@ -94,7 +94,17 @@ type NetworkHooker interface {
 	Hooks(log lager.Logger, handle, spec, externalNetworkSpec string) (gardener.Hooks, error)
 }
 
-type Networker struct {
+//go:generate counterfeiter . Networker
+
+type Networker interface {
+	Capacity() uint64
+	Hooks(log lager.Logger, handle, spec, externalNetworkSpec string) ([]gardener.Hooks, error)
+	Destroy(log lager.Logger, handle string) error
+	NetIn(log lager.Logger, handle string, externalPort, containerPort uint32) (uint32, uint32, error)
+	NetOut(log lager.Logger, handle string, rule garden.NetOutRule) error
+}
+
+type networker struct {
 	kawasakiBinPath string // path to a binary that will apply the configuration
 
 	specParser     SpecParser
@@ -119,8 +129,8 @@ func New(
 	portForwarder PortForwarder,
 	firewallOpener FirewallOpener,
 	networkHookers []NetworkHooker,
-) *Networker {
-	return &Networker{
+) *networker {
+	return &networker{
 		kawasakiBinPath: kawasakiBinPath,
 
 		specParser:    specParser,
@@ -139,7 +149,7 @@ func New(
 
 // Hooks provides path and appropriate arguments to the kawasaki executable that
 // applies the network configuration after the network namesapce creation.
-func (n *Networker) Hooks(log lager.Logger, handle, spec, externalNetworkSpec string) ([]gardener.Hooks, error) {
+func (n *networker) Hooks(log lager.Logger, handle, spec, externalNetworkSpec string) ([]gardener.Hooks, error) {
 	log = log.Session("network", lager.Data{
 		"handle": handle,
 		"spec":   spec,
@@ -222,11 +232,11 @@ func (n *Networker) Hooks(log lager.Logger, handle, spec, externalNetworkSpec st
 }
 
 // Capacity returns the number of subnets this network can host
-func (n *Networker) Capacity() uint64 {
+func (n *networker) Capacity() uint64 {
 	return uint64(n.subnetPool.Capacity())
 }
 
-func (n *Networker) NetIn(log lager.Logger, handle string, externalPort, containerPort uint32) (uint32, uint32, error) {
+func (n *networker) NetIn(log lager.Logger, handle string, externalPort, containerPort uint32) (uint32, uint32, error) {
 	cfg, err := load(n.configStore, handle)
 	if err != nil {
 		return 0, 0, err
@@ -266,7 +276,7 @@ func (n *Networker) NetIn(log lager.Logger, handle string, externalPort, contain
 	return externalPort, containerPort, nil
 }
 
-func (n *Networker) NetOut(log lager.Logger, handle string, rule garden.NetOutRule) error {
+func (n *networker) NetOut(log lager.Logger, handle string, rule garden.NetOutRule) error {
 	cfg, err := load(n.configStore, handle)
 	if err != nil {
 		return err
@@ -275,7 +285,7 @@ func (n *Networker) NetOut(log lager.Logger, handle string, rule garden.NetOutRu
 	return n.firewallOpener.Open(log, cfg.IPTableInstance, rule)
 }
 
-func (n *Networker) Destroy(log lager.Logger, handle string) error {
+func (n *networker) Destroy(log lager.Logger, handle string) error {
 	cfg, err := load(n.configStore, handle)
 	if err != nil {
 		return err

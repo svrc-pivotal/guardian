@@ -28,7 +28,7 @@ var _ = Describe("Networker", func() {
 		fakePortForwarder  *fakes.FakePortForwarder
 		fakePortPool       *fakes.FakePortPool
 		fakeFirewallOpener *fakes.FakeFirewallOpener
-		networker          *kawasaki.Networker
+		networker          kawasaki.Networker
 		logger             lager.Logger
 		networkConfig      kawasaki.NetworkConfig
 		config             map[string]string

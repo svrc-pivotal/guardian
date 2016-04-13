@@ -299,6 +299,7 @@ func (cmd *GuardianCommand) wireNetworker(
 		log.Fatal("invalid pool range", err)
 	}
 
+	// TODO: Create composite networker
 	return kawasaki.New(
 		kawasakiBin,
 		kawasaki.SpecParserFunc(kawasaki.ParseSpec),
