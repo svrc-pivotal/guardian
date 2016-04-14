@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -413,6 +414,51 @@ var _ = Describe("Net", func() {
 			)
 		})
 	})
+
+	FDescribe("MTU size", func() {
+		BeforeEach(func() {
+			args = append(args, "--mtu", "6789")
+		})
+
+		AfterEach(func() {
+			err := client.Destroy(container.Handle())
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Describe("container's network interface", func() {
+			It("has the correct MTU size", func() {
+				stdout := gbytes.NewBuffer()
+				stderr := gbytes.NewBuffer()
+
+				process, err := container.Run(garden.ProcessSpec{
+					User: "alice",
+					Path: "ifconfig",
+					//	Args: []string{containerIfName(container)},
+				}, garden.ProcessIO{
+					Stdout: stdout,
+					Stderr: stderr,
+				})
+				Expect(err).ToNot(HaveOccurred())
+				rc, err := process.Wait()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(rc).To(Equal(0))
+
+				Expect(stdout.Contents()).To(ContainSubstring(" MTU:6789 "))
+			})
+		})
+
+		Describe("hosts's network interface for a container", func() {
+			FIt("has the correct MTU size", func() {
+				//out, err := exec.Command("ifconfig", hostIfName(container)).Output()
+				out, err := exec.Command("ifconfig").Output()
+				Expect(err).ToNot(HaveOccurred())
+				fmt.Printf("CONTAINER HANDLE: %s\n", container.Handle())
+				time.Sleep(time.Hour)
+
+				Expect(out).To(ContainSubstring(" MTU:6789 "))
+			})
+		})
+	})
 })
 
 func externalIP(container garden.Container) string {
@@ -483,4 +529,26 @@ func getContent(filename string) func() []byte {
 		Expect(err).NotTo(HaveOccurred())
 		return bytes
 	}
+}
+
+func containerIfName(container garden.Container) string {
+	// return ifNamePrefix(container) + "-1"
+	properties, err := container.Properties()
+	fmt.Printf("PROPERTIES: %#v\n", properties)
+	Expect(err).NotTo(HaveOccurred())
+	return properties["kawasaki.container-interface"]
+}
+
+func hostIfName(container garden.Container) string {
+	// propertics, err := container.Properties()
+	// Expect(err).NotTo(HaveOccurred())
+	// return properties[gardener.hostIntfKey]
+	properties, err := container.Properties()
+	fmt.Printf("PROPERTIES: %#v\n", properties)
+	Expect(err).NotTo(HaveOccurred())
+	return properties["kawasaki."]
+}
+
+func ifNamePrefix(container garden.Container) string {
+	return "w" + strconv.Itoa(GinkgoParallelNode()) + container.Handle()
 }
