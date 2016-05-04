@@ -199,6 +199,11 @@ func (r *ExecPreparer) Prepare(log lager.Logger, bundlePath string, spec garden.
 		return nil, err
 	}
 
+	additionalGids := []uint32{}
+	for _, gid := range u.sgids {
+		additionalGids = append(additionalGids, uint32(gid))
+	}
+
 	cwd := u.home
 	if spec.Dir != "" {
 		cwd = spec.Dir
@@ -218,8 +223,9 @@ func (r *ExecPreparer) Prepare(log lager.Logger, bundlePath string, spec garden.
 		Args: append([]string{spec.Path}, spec.Args...),
 		Env:  envFor(u.containerUid, bndl, spec),
 		User: specs.User{
-			UID: uint32(u.containerUid),
-			GID: uint32(u.containerGid),
+			UID:            uint32(u.containerUid),
+			GID:            uint32(u.containerGid),
+			AdditionalGids: additionalGids,
 		},
 		Cwd:          cwd,
 		Capabilities: caps,
@@ -231,6 +237,7 @@ func (r *ExecPreparer) Prepare(log lager.Logger, bundlePath string, spec garden.
 type usr struct {
 	hostUid, hostGid           int
 	containerUid, containerGid int
+	sgids                      []int
 	home                       string
 }
 
@@ -251,6 +258,7 @@ func (r *ExecPreparer) lookupUser(bndl *goci.Bndl, rootfsPath, username string) 
 		hostGid:      gid,
 		containerUid: u.Uid,
 		containerGid: u.Gid,
+		sgids:        u.Sgids,
 		home:         u.Home,
 	}, nil
 }

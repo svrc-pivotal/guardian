@@ -336,7 +336,7 @@ var _ = Describe("ExecPreparer", func() {
 	Describe("passing the correct uid and gid", func() {
 		Context("when the bundle can be loaded", func() {
 			BeforeEach(func() {
-				users.LookupReturns(&user.ExecUser{Uid: 9, Gid: 7}, nil)
+				users.LookupReturns(&user.ExecUser{Uid: 9, Gid: 7, Sgids: []int{1, 2, 3, 4, 5}}, nil)
 
 				var err error
 				spec, err = preparer.Prepare(logger, bundlePath, garden.ProcessSpec{User: "spiderman"})
@@ -351,7 +351,11 @@ var _ = Describe("ExecPreparer", func() {
 			})
 
 			It("passes a process.json with the correct user and group ids", func() {
-				Expect(spec.User).To(Equal(specs.User{UID: 9, GID: 7}))
+				Expect(spec.User).To(Equal(specs.User{
+					UID:            9,
+					GID:            7,
+					AdditionalGids: []uint32{1, 2, 3, 4, 5},
+				}))
 			})
 		})
 

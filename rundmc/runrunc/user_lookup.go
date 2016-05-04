@@ -14,6 +14,7 @@ const (
 func LookupUser(rootFsPath, userName string) (*user.ExecUser, error) {
 	defaultUser := &user.ExecUser{Uid: DefaultUID, Gid: DefaultGID}
 	passwdPath := filepath.Join(rootFsPath, "etc", "passwd")
+	groupPath := filepath.Join(rootFsPath, "etc", "group")
 
-	return user.GetExecUserPath(userName, defaultUser, passwdPath, "")
+	return user.GetExecUserPath(userName, defaultUser, passwdPath, groupPath)
 }
