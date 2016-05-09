@@ -15,8 +15,11 @@ import (
 )
 
 func main() {
-	var logFile string
+	var logFile, stdoutPath, stdinPath, stderrPath string
 	flag.StringVar(&logFile, "log", "dadoo.log", "dadoo log file path")
+	flag.StringVar(&stdoutPath, "stdout", "stdout", "path to stdout")
+	flag.StringVar(&stdinPath, "stdin", "stdin", "path to stdin")
+	flag.StringVar(&stderrPath, "stderr", "stderr", "path to stderr")
 	flag.Parse()
 
 	command := flag.Args()[0] // e.g. run
@@ -42,8 +45,20 @@ func main() {
 	// listen to an exit socket early so waiters can wait for dadoo
 	dadoo.Listen(filepath.Join(bundlePath, "exit.sock"))
 
+	stdin, err := os.Open(stdinPath)
+	check(err)
+
+	stdout, err := os.OpenFile(stdoutPath, os.O_WRONLY|os.O_APPEND, 0600)
+	check(err)
+
+	stderr, err := os.OpenFile(stderrPath, os.O_WRONLY|os.O_APPEND, 0600)
+	check(err)
+
 	runcStartCmd := exec.Command(runtime, "-debug", "-log", logFile, "start", "-d", "-pid-file", pidFilePath, containerId)
 	runcStartCmd.Dir = bundlePath
+	runcStartCmd.Stdout = stdout
+	runcStartCmd.Stdin = stdin
+	runcStartCmd.Stderr = stderr
 
 	if err := runcStartCmd.Start(); err != nil {
 		fd3.Write([]byte{2})

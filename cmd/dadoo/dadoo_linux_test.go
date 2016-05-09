@@ -17,6 +17,7 @@ import (
 	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pivotal-golang/lager/lagertest"
@@ -50,7 +51,7 @@ var _ = Describe("Dadoo", func() {
 		Eventually(cp, "2m").Should(gexec.Exit(0))
 
 		bundle = bundle.
-			WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "exit 12"}, Cwd: "/"}).
+			WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "echo hello; exit 12"}, Cwd: "/"}).
 			WithRootFS(path.Join(bundlePath, "root"))
 
 		SetDefaultEventuallyTimeout(5 * time.Second)
@@ -86,6 +87,99 @@ var _ = Describe("Dadoo", func() {
 		state, err := gexec.Start(exec.Command("runc", "state", filepath.Base(bundlePath)), GinkgoWriter, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(state).Should(gexec.Exit(1))
+	})
+
+	It("should allow stdout of the process to be read by opening /proc/$PID/fd/1 of dadoo", func() {
+		sess, err := gexec.Start(exec.Command(dadooBinPath, "run", "runc", bundlePath, filepath.Base(bundlePath)), GinkgoWriter, GinkgoWriter)
+		Expect(err).NotTo(HaveOccurred())
+
+		Eventually(sess).Should(gbytes.Say("hello"))
+	})
+
+	// FIt("should allow stdin of the ")
+
+	Describe("using named pipes for stdout/in/error", func() {
+		var (
+			stdoutPipe, stdinPipe, stderrPipe string
+		)
+
+		BeforeEach(func() {
+			bundle = bundle.
+				WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "cat <&0"}, Cwd: "/"})
+
+			tmp, err := ioutil.TempDir("", "dadoopipetest")
+			Expect(err).NotTo(HaveOccurred())
+
+			stdoutPipe = filepath.Join(tmp, "stdout.pipe")
+			Expect(syscall.Mkfifo(stdoutPipe, 0)).To(Succeed())
+
+			stderrPipe = filepath.Join(tmp, "stderr.pipe")
+			Expect(syscall.Mkfifo(stderrPipe, 0)).To(Succeed())
+
+			stdinPipe = filepath.Join(tmp, "stdin.pipe")
+			Expect(syscall.Mkfifo(stdinPipe, 0)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			Expect(os.Remove(stdoutPipe)).To(Succeed())
+			Expect(os.Remove(stderrPipe)).To(Succeed())
+			Expect(os.Remove(stdinPipe)).To(Succeed())
+		})
+
+		FIt("should be able to pass named pipes to use as stdin and stdout", func() {
+			cmd := exec.Command(dadooBinPath, "-stdout", stdoutPipe, "-stdin", stdinPipe, "-stderr", stderrPipe, "run", "runc", bundlePath, filepath.Base(bundlePath))
+			_, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+			Expect(err).NotTo(HaveOccurred())
+
+			stdinP, err := os.OpenFile(stdinPipe, os.O_WRONLY, 0600)
+			Expect(err).NotTo(HaveOccurred())
+
+			stdoutP, err := os.Open(stdoutPipe)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = os.Open(stderrPipe)
+			Expect(err).NotTo(HaveOccurred())
+
+			stdinP.WriteString("hello")
+			Expect(stdinP.Close()).To(Succeed())
+
+			stdout := make([]byte, len("hello"))
+			_, err = stdoutP.Read(stdout)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(string(stdout)).To(Equal("hello"))
+		})
+
+		Context("when output goes to stderr", func() {
+			BeforeEach(func() {
+				bundle = bundle.
+					WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "cat <&0 1>&2"}, Cwd: "/"})
+			})
+
+			FIt("should be able to pass named pipes to use as stdin and stderr", func() {
+				cmd := exec.Command(dadooBinPath, "-stdout", stdoutPipe, "-stdin", stdinPipe, "-stderr", stderrPipe, "run", "runc", bundlePath, filepath.Base(bundlePath))
+				_, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+				Expect(err).NotTo(HaveOccurred())
+
+				stdinP, err := os.OpenFile(stdinPipe, os.O_WRONLY, 0600)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = os.Open(stdoutPipe)
+				Expect(err).NotTo(HaveOccurred())
+
+				stderrP, err := os.Open(stderrPipe)
+				Expect(err).NotTo(HaveOccurred())
+
+				stdinP.WriteString("hello")
+				Expect(stdinP.Close()).To(Succeed())
+
+				stderr := make([]byte, len("hello"))
+				_, err = stderrP.Read(stderr)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(string(stderr)).To(Equal("hello"))
+			})
+		})
 	})
 
 	Describe("returning runc's exit code on fd3", func() {
