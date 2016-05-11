@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var theSecretGarden string
+var theSecretGardenBin string
 
 func TestThesecretGarden(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -40,7 +40,7 @@ func TestThesecretGarden(t *testing.T) {
 		bins := make(map[string]string)
 		Expect(json.Unmarshal(data, &bins)).To(Succeed())
 
-		theSecretGarden = bins["the_secret_garden"]
+		theSecretGardenBin = bins["the_secret_garden"]
 	})
 
 	BeforeEach(func() {
@@ -49,5 +49,5 @@ func TestThesecretGarden(t *testing.T) {
 		}
 	})
 
-	RunSpecs(t, "ThesecretGarden Suite")
+	RunSpecs(t, "The SecretGarden Suite")
 }
