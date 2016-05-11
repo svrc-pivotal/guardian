@@ -25,7 +25,7 @@ func TestThesecretGarden(t *testing.T) {
 			return nil
 		}
 
-		bins["the_secret_garden"], err = gexec.Build("github.com/cloudfoundry-incubator/guardian/cmd/thesecret-garden")
+		bins["the_secret_garden"], err = gexec.Build("github.com/cloudfoundry-incubator/guardian/cmd/the-secret-garden")
 		Expect(err).NotTo(HaveOccurred())
 
 		data, err := json.Marshal(bins)
@@ -45,9 +45,9 @@ func TestThesecretGarden(t *testing.T) {
 
 	BeforeEach(func() {
 		if skip {
-			Skip("thesecret-garden requires linux")
+			Skip("the-secret-garden requires linux")
 		}
 	})
 
-	RunSpecs(t, "The SecretGarden Suite")
+	RunSpecs(t, "The Secret Garden Suite")
 }
