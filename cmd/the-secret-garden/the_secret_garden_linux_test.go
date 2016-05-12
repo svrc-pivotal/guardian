@@ -19,20 +19,13 @@ var _ = FDescribe("The Secret Garden", func() {
 	var (
 		stubProcess string
 		fakeDataDir string
-		sharedDir   string
-		secretDir   string
-		err         error
 		session     *gexec.Session
 	)
 
 	//TODO: Remove env flags.
 	unshareCmd := func(program string, args ...string) *gexec.Session {
 		cmd := exec.Command("unshare", "-m", "/bin/bash")
-		cmd.Env = []string{
-			"PATH=/bin:/usr/bin:.",
-			fmt.Sprintf("SECRET_DIR=%s", secretDir),
-			fmt.Sprintf("SHARED_DIR=%s", sharedDir),
-		}
+		cmd.Env = []string{"PATH=/bin:/usr/bin:."}
 
 		stdinPipe, err := cmd.StdinPipe()
 		Expect(err).NotTo(HaveOccurred())
@@ -50,10 +43,9 @@ var _ = FDescribe("The Secret Garden", func() {
 	}
 
 	BeforeEach(func() {
+		var err error
 		fakeDataDir, err = ioutil.TempDir("", "data")
 		Expect(err).NotTo(HaveOccurred())
-		sharedDir = filepath.Join(fakeDataDir, "shared")
-		secretDir = filepath.Join(fakeDataDir, "secret")
 
 		Expect(exec.Command("mount", "--bind", fakeDataDir, fakeDataDir).Run()).To(Succeed())
 		Expect(exec.Command("mount", "--make-shared", fakeDataDir).Run()).To(Succeed())
@@ -64,23 +56,32 @@ var _ = FDescribe("The Secret Garden", func() {
 		Expect(os.RemoveAll(fakeDataDir)).To(Succeed())
 	})
 
-	It("returns exit code when it fails to mount a slave mountpoint", func() {
-		session = unshareCmd(theSecretGardenBin, "", "")
+	It("exits non-zero when it fails to mount --make-shared", func() {
+		session = unshareCmd(theSecretGardenBin, "nnonexistent-dir", "pwd")
 		Eventually(session).Should(gexec.Exit(1))
+		Expect(session.Out).To(gbytes.Say("Failed to make slave 'nnonexistent-dir'"))
+	})
+
+	It("exits non-zero when the command it execs fails", func() {
+		session = unshareCmd(theSecretGardenBin, fakeDataDir, "no-such-cmd")
+		Eventually(session).Should(gexec.Exit(1))
+		Expect(session.Out).To(gbytes.Say("Failed to execute command 'no-such-cmd'"))
 	})
 
 	Context("when the process creates a mount", func() {
 		const makeSecretMount = `#!/bin/sh
-		set -e -x
-		mkdir -p ${SECRET_DIR}
-		mount -t tmpfs tmpfs ${SECRET_DIR}
-		touch ${SECRET_DIR}/mysecret
-		echo -n password > ${SECRET_DIR}/mysecret
-	`
+			set -e -x
+			mkdir -p ${1}
+			mount -t tmpfs tmpfs ${1}
+			touch ${1}/mysecret
+			echo -n password > ${1}/mysecret
+		`
+
+		var secretDir string
 
 		BeforeEach(func() {
 			stubProcess = "create-mount.sh"
-
+			secretDir = filepath.Join(fakeDataDir, "secret")
 			Expect(ioutil.WriteFile(stubProcess, []byte(makeSecretMount), 0777)).To(Succeed())
 		})
 
@@ -89,26 +90,28 @@ var _ = FDescribe("The Secret Garden", func() {
 		})
 
 		It("prevents the mount to be seen from outside the namespace", func() {
-			session = unshareCmd(theSecretGardenBin, fakeDataDir, stubProcess)
+			session = unshareCmd(theSecretGardenBin, fakeDataDir, stubProcess, secretDir)
 
 			Consistently(func() []os.FileInfo {
 				fileInfo, _ := ioutil.ReadDir(secretDir)
 				return fileInfo
-			}, "5s").Should(BeEmpty())
+			}).Should(BeEmpty())
 
-			Eventually(session, "5s").Should(gexec.Exit(0))
+			Eventually(session).Should(gexec.Exit(0))
 		})
 	})
 
 	Context("when a mount is created outside the namespace", func() {
 		const accessSharedMount = `#!/bin/sh
-		set -e -x
-		sleep 1
-		stat ${SHARED_DIR}/myfile
-	`
+			set -e -x
+			sleep 1
+			stat ${1}/myfile
+		`
+		var sharedDir string
 
 		BeforeEach(func() {
 			stubProcess = "access-mount.sh"
+			sharedDir = filepath.Join(fakeDataDir, "shared")
 			Expect(ioutil.WriteFile(stubProcess, []byte(accessSharedMount), 0777)).To(Succeed())
 		})
 
@@ -118,13 +121,13 @@ var _ = FDescribe("The Secret Garden", func() {
 		})
 
 		It("is visible inside the unshared namespace", func() {
-			session = unshareCmd(theSecretGardenBin, fakeDataDir, stubProcess)
+			session = unshareCmd(theSecretGardenBin, fakeDataDir, stubProcess, sharedDir)
 
 			Expect(exec.Command("mkdir", sharedDir).Run()).To(Succeed())
 			Expect(exec.Command("mount", "-t", "tmpfs", "tmpfs", sharedDir).Run()).To(Succeed())
 			Expect(exec.Command("touch", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
 
-			Eventually(session, "5s").Should(gexec.Exit(0))
+			Eventually(session, "3s").Should(gexec.Exit(0))
 			Expect(session.Out).To(gbytes.Say("shared/myfile"))
 		})
 	})
