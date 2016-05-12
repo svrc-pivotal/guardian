@@ -3,6 +3,7 @@ package dadoo_test
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -47,14 +48,19 @@ var _ = Describe("Exec", func() {
 				si, err := os.Open(*stdin)
 				Expect(err).NotTo(HaveOccurred())
 
-				so, err := os.OpenFile(*stdout, os.O_WRONLY, 0600)
+				so, err := os.OpenFile(*stdout, os.O_APPEND|os.O_WRONLY, 0600)
 				Expect(err).NotTo(HaveOccurred())
 
-				se, err := os.OpenFile(*stderr, os.O_WRONLY, 0600)
+				se, err := os.OpenFile(*stderr, os.O_APPEND|os.O_WRONLY, 0600)
 				Expect(err).NotTo(HaveOccurred())
 
+				fmt.Println("About to write to stdout")
 				so.WriteString("hello")
-				io.Copy(se, si)
+
+				fmt.Println("About to copy io in stderr")
+				n, err := io.Copy(se, si)
+				fmt.Printf("copied %d bytes: %s", n, err)
+				Expect(err).NotTo(HaveOccurred())
 			}(cmd)
 
 			return nil
@@ -96,16 +102,13 @@ var _ = Describe("Exec", func() {
 
 	Context("when dadoo writes data from the named pipe at -stdin to the named pipe at -stdout", func() {
 		FIt("the data is passed from and to the processio.Stdin/err as appropriate", func() {
-			stdin := gbytes.NewBuffer()
+			stdin := bytes.NewBufferString("I am stdin")
 			stderr := gbytes.NewBuffer()
 
 			doo := dadoo.NewTracker(fakeCommandRunner)
-			doo.Exec(bundlePath, "id", "process-id", bytes.NewBufferString("json"), garden.ProcessIO{Stderr: stderr, Stdin: stdin}, garden.TTYSpec{})
+			doo.Exec(bundlePath, "id", "process-id", bytes.NewBufferString("json"), garden.ProcessIO{Stderr: stderr, Stdout: GinkgoWriter, Stdin: stdin}, garden.TTYSpec{})
 
-			stdin.Write([]byte("I am stdin"))
-			stdin.Close()
-
-			Eventually(stderr).Should(gbytes.Say("I am stdin"))
+			Eventually(stderr, "5s").Should(gbytes.Say("I am stdin"))
 		})
 	})
 

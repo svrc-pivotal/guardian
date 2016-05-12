@@ -11,15 +11,25 @@ import (
 	"syscall"
 
 	"github.com/cloudfoundry-incubator/guardian/rundmc/dadoo"
+	"github.com/kr/pty"
 	"github.com/opencontainers/runc/libcontainer/system"
 )
 
 func main() {
-	var logFile, stdoutPath, stdinPath, stderrPath string
+	var logFile string
 	flag.StringVar(&logFile, "log", "dadoo.log", "dadoo log file path")
-	flag.StringVar(&stdoutPath, "stdout", "stdout", "path to stdout")
-	flag.StringVar(&stdinPath, "stdin", "stdin", "path to stdin")
-	flag.StringVar(&stderrPath, "stderr", "stderr", "path to stderr")
+
+	var (
+		stdoutPath, stdinPath, stderrPath string
+		processJSONPath                   string
+		isTTY                             bool
+	)
+	flag.StringVar(&stdoutPath, "stdout", "", "path to stdout")
+	flag.StringVar(&stdinPath, "stdin", "", "path to stdin")
+	flag.StringVar(&stderrPath, "stderr", "", "path to stderr")
+	flag.StringVar(&processJSONPath, "process", "", "path to the process.json file")
+	flag.BoolVar(&isTTY, "tty", false, "create a TTY")
+
 	flag.Parse()
 
 	command := flag.Args()[0] // e.g. run
@@ -27,7 +37,7 @@ func main() {
 	bundlePath := flag.Args()[2]
 	containerId := flag.Args()[3]
 
-	if command != "run" {
+	if command != "run" && command != "exec" {
 		fmt.Fprintf(os.Stderr, "unknown command: %s", command)
 		os.Exit(127)
 	}
@@ -42,32 +52,57 @@ func main() {
 	// we need to be the subreaper so we can wait on the detached container process
 	system.SetSubreaper(os.Getpid())
 
-	// listen to an exit socket early so waiters can wait for dadoo
-	dadoo.Listen(filepath.Join(bundlePath, "exit.sock"))
+	var runcCmd *exec.Cmd
+	if command == "run" {
+		// listen to an exit socket early so waiters can wait for dadoo
+		dadoo.Listen(filepath.Join(bundlePath, "exit.sock"))
+		runcCmd = exec.Command(runtime, "-debug", "-log", logFile, "start")
+	}
 
-	stdin, err := os.Open(stdinPath)
-	check(err)
+	if command == "exec" {
+		runcCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec")
+	}
 
-	stdout, err := os.OpenFile(stdoutPath, os.O_WRONLY|os.O_APPEND, 0600)
-	check(err)
+	runcArgs := []string{"-d", "-pid-file", pidFilePath}
+	runcCmd.Dir = bundlePath
+	runcCmd.Stdout = os.Stdout
+	runcCmd.Stderr = os.Stderr
 
-	stderr, err := os.OpenFile(stderrPath, os.O_WRONLY|os.O_APPEND, 0600)
-	check(err)
+	if stdinPath != "" {
+		stdin, err := os.Open(stdinPath)
+		check(err)
+		runcCmd.Stdin = stdin
+	}
 
-	runcStartCmd := exec.Command(runtime, "-debug", "-log", logFile, "start", "-d", "-pid-file", pidFilePath, containerId)
-	runcStartCmd.Dir = bundlePath
-	runcStartCmd.Stdout = stdout
-	runcStartCmd.Stdin = stdin
-	runcStartCmd.Stderr = stderr
+	if stdoutPath != "" {
+		stdout, err := os.OpenFile(stdoutPath, os.O_WRONLY|os.O_APPEND, 0600)
+		check(err)
+		runcCmd.Stdout = stdout
+	}
 
-	if err := runcStartCmd.Start(); err != nil {
+	if stderrPath != "" {
+		stderr, err := os.OpenFile(stderrPath, os.O_WRONLY|os.O_APPEND, 0600)
+		check(err)
+		runcCmd.Stderr = stderr
+	}
+
+	if isTTY {
+		_, t, _ := pty.Open()
+		runcArgs = append(runcArgs, "-console", t.Name())
+	}
+
+	if processJSONPath != "" {
+		runcArgs = append(runcArgs, "-process", processJSONPath)
+	}
+
+	runcCmd.Args = append(runcCmd.Args, append(runcArgs, containerId)...)
+	if err := runcCmd.Start(); err != nil {
 		fd3.Write([]byte{2})
 		os.Exit(2)
 	}
 
 	containerPid := -2
 	for range signals {
-
 		exits := make(map[int]int)
 		for {
 			var status syscall.WaitStatus
@@ -78,7 +113,7 @@ func main() {
 				break // wait for next SIGCHLD
 			}
 
-			if wpid == runcStartCmd.Process.Pid {
+			if wpid == runcCmd.Process.Pid {
 				fd3.Write([]byte{byte(status.ExitStatus())})
 
 				if status.ExitStatus() != 0 {
