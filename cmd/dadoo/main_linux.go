@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -65,8 +66,6 @@ func main() {
 
 	runcArgs := []string{"-d", "-pid-file", pidFilePath}
 	runcCmd.Dir = bundlePath
-	runcCmd.Stdout = os.Stdout
-	runcCmd.Stderr = os.Stderr
 
 	if stdinPath != "" {
 		stdin, err := os.Open(stdinPath)
@@ -87,8 +86,11 @@ func main() {
 	}
 
 	if isTTY {
-		_, t, _ := pty.Open()
+		p, t, _ := pty.Open()
 		runcArgs = append(runcArgs, "-console", t.Name())
+
+		go io.Copy(os.Stdout, p)
+		go io.Copy(p, os.Stdin)
 	}
 
 	if processJSONPath != "" {
@@ -129,7 +131,9 @@ func main() {
 			}
 
 			if status, ok := exits[containerPid]; ok {
+				//if command == "run" {
 				check(exec.Command(runtime, "delete", containerId).Run())
+				//	}
 				os.Exit(status)
 			}
 		}
