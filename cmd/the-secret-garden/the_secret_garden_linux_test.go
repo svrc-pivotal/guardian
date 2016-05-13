@@ -157,8 +157,10 @@ var _ = FDescribe("The Secret Garden", func() {
 			Eventually(func() string {
 				out, err := exec.Command("mount").CombinedOutput()
 				Expect(err).NotTo(HaveOccurred())
+				fmt.Printf("MOUNT OUTPUT: %s\n", string(out))
 				return string(out)
 			}).Should(ContainSubstring(fmt.Sprintf("tmpfs on %s", sharedDir)))
+			fmt.Printf("SHAREDDIR: %s\n", sharedDir)
 
 			Expect(exec.Command("touch", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
 			Expect(exec.Command("stat", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
