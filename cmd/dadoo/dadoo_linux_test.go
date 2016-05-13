@@ -340,22 +340,29 @@ var _ = FDescribe("Dadoo", func() {
 			})
 
 			Describe("with a TTY", func() {
-				FIt("assigns a TTY to the process", func() {
+				It("assigns a TTY to the process", func() {
 					processJSONPath = writeProcessJSON(bundlePath, specs.Process{
-						Args:     []string{"/bin/sh", "-c", "tty"},
+						Args:     []string{"/bin/sh", "-c", "stty -a"},
 						Cwd:      "/",
 						Terminal: true,
 					})
-					cmd := exec.Command(dadooBinPath, "-tty", "-process", processJSONPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
-					// cmd := exec.Command("strace", "-ft", dadooBinPath, "-log", path.Join(bundlePath, "dadoo.log"), "-tty", "-process", processJSONPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
-					fmt.Printf("%#v\n", cmd)
+					cmd := exec.Command(dadooBinPath, "-tty", "-stdout", stdoutPipe, "-process", processJSONPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
 					sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 					Expect(err).NotTo(HaveOccurred())
 
+					stdoutP, err := os.Open(stdoutPipe)
+					Expect(err).NotTo(HaveOccurred())
+
 					Eventually(sess).Should(gexec.Exit(0))
+
+					stdout := make([]byte, 1024)
+					_, err = stdoutP.Read(stdout)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(string(stdout)).To(ContainSubstring("speed 38400"))
 				})
 
-				It("forwards streams to the pseudo-terminal", func() {
+				It("forwards stdout and stdin to the pipes", func() {
 					processJSONPath = writeProcessJSON(bundlePath, specs.Process{
 						Args: []string{"/bin/sh", "-c", "cat <&0"},
 						Cwd:  "/",
@@ -376,7 +383,6 @@ var _ = FDescribe("Dadoo", func() {
 					stdout := make([]byte, len("hello"))
 					_, err = stdoutP.Read(stdout)
 					Expect(err).NotTo(HaveOccurred())
-
 					Expect(string(stdout)).To(Equal("hello"))
 				})
 			})

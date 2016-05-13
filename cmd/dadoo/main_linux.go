@@ -87,10 +87,16 @@ func main() {
 
 	if isTTY {
 		p, t, _ := pty.Open()
-		runcArgs = append(runcArgs, "-console", t.Name())
+		runcArgs = append(runcArgs, "-tty", "-console", t.Name())
 
-		go io.Copy(os.Stdout, p)
-		go io.Copy(p, os.Stdin)
+		if runcCmd.Stdout != nil {
+			go io.Copy(runcCmd.Stdout, p)
+			runcCmd.Stdout = nil
+		}
+		if runcCmd.Stdin != nil {
+			go io.Copy(p, runcCmd.Stdin)
+			runcCmd.Stdin = nil
+		}
 	}
 
 	if processJSONPath != "" {
@@ -131,9 +137,10 @@ func main() {
 			}
 
 			if status, ok := exits[containerPid]; ok {
-				//if command == "run" {
-				check(exec.Command(runtime, "delete", containerId).Run())
-				//	}
+				if command == "run" {
+					check(exec.Command(runtime, "delete", containerId).Run())
+				}
+
 				os.Exit(status)
 			}
 		}
