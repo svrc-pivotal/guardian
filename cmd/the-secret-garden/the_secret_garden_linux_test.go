@@ -43,10 +43,10 @@ var _ = FDescribe("The Secret Garden", func() {
 		Expect(os.MkdirAll(graphDir, 0777)).To(Succeed())
 	})
 
-	// AfterEach(func() {
-	// 	exec.Command("umount", fakeDataDir).Run()
-	// 	os.RemoveAll(fakeDataDir)
-	// })
+	AfterEach(func() {
+		exec.Command("umount", fakeDataDir).Run()
+		os.RemoveAll(fakeDataDir)
+	})
 
 	It("makes sure the data dir is mounted exactly once", func() {
 		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "mount")
@@ -143,31 +143,27 @@ var _ = FDescribe("The Secret Garden", func() {
 			Expect(ioutil.WriteFile(stubProcess, []byte(accessSharedMount), 0777)).To(Succeed())
 		})
 
-		// AfterEach(func() {
-		// 	exec.Command("umount", sharedDir).Run()
-		// 	os.Remove(stubProcess)
-		// })
+		AfterEach(func() {
+			exec.Command("umount", sharedDir).Run()
+			os.Remove(stubProcess)
+		})
 
-		FIt("is visible inside the unshared namespace", func() {
+		It("is visible inside the unshared namespace", func() {
 			session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, stubProcess, sharedDir)
-
-			Expect(exec.Command("mkdir", sharedDir).Run()).To(Succeed())
-			Expect(exec.Command("mount", "-t", "tmpfs", "tmpfs", sharedDir).Run()).To(Succeed())
-
 			Eventually(func() string {
 				out, err := exec.Command("mount").CombinedOutput()
 				Expect(err).NotTo(HaveOccurred())
-				fmt.Printf("MOUNT OUTPUT: %s\n", string(out))
 				return string(out)
-			}).Should(ContainSubstring(fmt.Sprintf("tmpfs on %s", sharedDir)))
-			fmt.Printf("SHAREDDIR: %s\n", sharedDir)
+			}).Should(ContainSubstring(fmt.Sprintf("%s on %s type none (rw,bind)", fakeDataDir, fakeDataDir)))
+
+			Expect(exec.Command("mkdir", sharedDir).Run()).To(Succeed())
+			Expect(exec.Command("mount", "-t", "tmpfs", "tmpfs", sharedDir).Run()).To(Succeed())
 
 			Expect(exec.Command("touch", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
 			Expect(exec.Command("stat", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
 
 			Eventually(session, "10s").Should(gexec.Exit(0))
 			Expect(session.Out).To(gbytes.Say("shared/myfile"))
-
 		})
 	})
 })
