@@ -1,13 +1,12 @@
 package main_test
 
 import (
-	"bufio"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+	"regexp"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,26 +16,16 @@ import (
 
 var _ = FDescribe("The Secret Garden", func() {
 	var (
-		stubProcess string
-		fakeDataDir string
-		session     *gexec.Session
+		stubProcess  string
+		fakeDataDir  string
+		realGraphDir string
+		graphDir     string
+		session      *gexec.Session
 	)
 
-	//TODO: Remove env flags.
-	unshareCmd := func(program string, args ...string) *gexec.Session {
-		cmd := exec.Command("unshare", "-m", "/bin/bash")
-		cmd.Env = []string{"PATH=/bin:/usr/bin:."}
-
-		stdinPipe, err := cmd.StdinPipe()
-		Expect(err).NotTo(HaveOccurred())
-
-		bw := bufio.NewWriter(stdinPipe)
-		bw.WriteString(fmt.Sprintf("%s %s\n", program, strings.Join(args, " ")))
-		bw.Flush()
-		stdinPipe.Close()
-
+	runSecretGarden := func(dataDir, realGraphDir, graphDir, bin string, args ...string) *gexec.Session {
+		cmd := exec.Command(theSecretGardenBin, append([]string{dataDir, realGraphDir, graphDir, bin}, args...)...)
 		sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-
 		Expect(err).NotTo(HaveOccurred())
 
 		return sess
@@ -47,25 +36,58 @@ var _ = FDescribe("The Secret Garden", func() {
 		fakeDataDir, err = ioutil.TempDir("", "data")
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(exec.Command("mount", "--bind", fakeDataDir, fakeDataDir).Run()).To(Succeed())
-		Expect(exec.Command("mount", "--make-shared", fakeDataDir).Run()).To(Succeed())
+		realGraphDir = filepath.Join(fakeDataDir, "realgraph", "graph")
+		Expect(os.MkdirAll(realGraphDir, 0777)).To(Succeed())
+
+		graphDir = filepath.Join(fakeDataDir, "graph")
+		Expect(os.MkdirAll(graphDir, 0777)).To(Succeed())
 	})
 
-	AfterEach(func() {
-		Expect(exec.Command("umount", fakeDataDir).Run()).To(Succeed())
-		Expect(os.RemoveAll(fakeDataDir)).To(Succeed())
+	// AfterEach(func() {
+	// 	exec.Command("umount", fakeDataDir).Run()
+	// 	os.RemoveAll(fakeDataDir)
+	// })
+
+	It("makes sure the data dir is mounted exactly once", func() {
+		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "mount")
+		Eventually(session).Should(gexec.Exit(0))
+
+		exp := fmt.Sprintf("%s on %s", fakeDataDir, fakeDataDir)
+		Expect(session.Out).To(gbytes.Say(exp))
+
+		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "mount")
+		Eventually(session).Should(gexec.Exit(0))
+
+		Expect(regexp.MustCompile(exp).FindAll(session.Out.Contents(), -1)).To(HaveLen(1))
 	})
 
 	It("exits non-zero when it fails to mount --make-shared", func() {
-		session = unshareCmd(theSecretGardenBin, "nnonexistent-dir", "pwd")
-		Eventually(session).Should(gexec.Exit(1))
-		Expect(session.Out).To(gbytes.Say("Failed to make slave 'nnonexistent-dir'"))
+		session = runSecretGarden("nnonexistent-dir", realGraphDir, graphDir, "pwd")
+		Eventually(session).Should(gexec.Exit(2))
+	})
+
+	It("mounts the realgraph/graph on the graph path exactly once", func() {
+		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "mount")
+		Eventually(session).Should(gexec.Exit(0))
+
+		exp := fmt.Sprintf("%s on %s", realGraphDir, graphDir)
+		Expect(session.Out).To(gbytes.Say(exp))
+
+		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "mount")
+		Eventually(session).Should(gexec.Exit(0))
+
+		Expect(regexp.MustCompile(exp).FindAll(session.Out.Contents(), -1)).To(HaveLen(1))
+	})
+
+	It("exits non-zero when it fails to mount the graph", func() {
+		session = runSecretGarden(fakeDataDir, "no-such-dir", graphDir, "mount")
+		Eventually(session).Should(gexec.Exit(2))
 	})
 
 	It("exits non-zero when the command it execs fails", func() {
-		session = unshareCmd(theSecretGardenBin, fakeDataDir, "no-such-cmd")
+		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "no-such-cmd")
 		Eventually(session).Should(gexec.Exit(1))
-		Expect(session.Out).To(gbytes.Say("Failed to execute command 'no-such-cmd'"))
+		Expect(session.Out).To(gbytes.Say("exec secret garden: exit status 1"))
 	})
 
 	Context("when the process creates a mount", func() {
@@ -80,7 +102,7 @@ var _ = FDescribe("The Secret Garden", func() {
 		var secretDir string
 
 		BeforeEach(func() {
-			stubProcess = "create-mount.sh"
+			stubProcess = filepath.Join(fakeDataDir, "create-mount.sh")
 			secretDir = filepath.Join(fakeDataDir, "secret")
 			Expect(ioutil.WriteFile(stubProcess, []byte(makeSecretMount), 0777)).To(Succeed())
 		})
@@ -90,7 +112,7 @@ var _ = FDescribe("The Secret Garden", func() {
 		})
 
 		It("prevents the mount to be seen from outside the namespace", func() {
-			session = unshareCmd(theSecretGardenBin, fakeDataDir, stubProcess, secretDir)
+			session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, stubProcess, secretDir)
 
 			Consistently(func() []os.FileInfo {
 				fileInfo, _ := ioutil.ReadDir(secretDir)
@@ -102,33 +124,48 @@ var _ = FDescribe("The Secret Garden", func() {
 	})
 
 	Context("when a mount is created outside the namespace", func() {
-		const accessSharedMount = `#!/bin/sh
-			set -e -x
-			sleep 1
-			stat ${1}/myfile
+		const accessSharedMount = `#!/bin/bash
+			set -x
+			for i in $(seq 1 10); do
+				echo trying $i
+				sleep 1
+				stat ${1}/myfile
+				if [[ $? -eq 0 ]]; then
+					exit
+				fi
+			done
 		`
 		var sharedDir string
 
 		BeforeEach(func() {
-			stubProcess = "access-mount.sh"
+			stubProcess = filepath.Join(fakeDataDir, "access-mount.sh")
 			sharedDir = filepath.Join(fakeDataDir, "shared")
 			Expect(ioutil.WriteFile(stubProcess, []byte(accessSharedMount), 0777)).To(Succeed())
 		})
 
-		AfterEach(func() {
-			Expect(exec.Command("umount", sharedDir).Run()).To(Succeed())
-			Expect(os.Remove(stubProcess)).To(Succeed())
-		})
+		// AfterEach(func() {
+		// 	exec.Command("umount", sharedDir).Run()
+		// 	os.Remove(stubProcess)
+		// })
 
-		It("is visible inside the unshared namespace", func() {
-			session = unshareCmd(theSecretGardenBin, fakeDataDir, stubProcess, sharedDir)
+		FIt("is visible inside the unshared namespace", func() {
+			session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, stubProcess, sharedDir)
 
 			Expect(exec.Command("mkdir", sharedDir).Run()).To(Succeed())
 			Expect(exec.Command("mount", "-t", "tmpfs", "tmpfs", sharedDir).Run()).To(Succeed())
-			Expect(exec.Command("touch", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
 
-			Eventually(session, "3s").Should(gexec.Exit(0))
+			Eventually(func() string {
+				out, err := exec.Command("mount").CombinedOutput()
+				Expect(err).NotTo(HaveOccurred())
+				return string(out)
+			}).Should(ContainSubstring(fmt.Sprintf("tmpfs on %s", sharedDir)))
+
+			Expect(exec.Command("touch", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
+			Expect(exec.Command("stat", filepath.Join(sharedDir, "myfile")).Run()).To(Succeed())
+
+			Eventually(session, "10s").Should(gexec.Exit(0))
 			Expect(session.Out).To(gbytes.Say("shared/myfile"))
+
 		})
 	})
 })
