@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -217,8 +218,7 @@ var _ = FDescribe("Dadoo", func() {
 
 	Describe("dadoo exec", func() {
 		var (
-			containerSess   *gexec.Session
-			processJSONPath string
+			containerSess *gexec.Session
 		)
 
 		BeforeEach(func() {
@@ -282,11 +282,11 @@ var _ = FDescribe("Dadoo", func() {
 			})
 
 			It("should be able to pass named pipes to use as stdin and stdout", func() {
-				processJSONPath = writeProcessJSON(bundlePath, specs.Process{
+				cmd := exec.Command(dadooBinPath, "-stdout", stdoutPipe, "-stdin", stdinPipe, "-stderr", stderrPipe, "exec", "runc", bundlePath, filepath.Base(bundlePath))
+				cmd.Stdin = processJSONReader(specs.Process{
 					Args: []string{"/bin/sh", "-c", "cat <&0"},
 					Cwd:  "/",
 				})
-				cmd := exec.Command(dadooBinPath, "-stdout", stdoutPipe, "-stdin", stdinPipe, "-stderr", stderrPipe, "-process", processJSONPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
 				_, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -311,11 +311,11 @@ var _ = FDescribe("Dadoo", func() {
 
 			Context("when output goes to stderr", func() {
 				It("should be able to pass named pipes to use as stdin and stderr", func() {
-					processJSONPath = writeProcessJSON(bundlePath, specs.Process{
+					cmd := exec.Command(dadooBinPath, "-stdout", stdoutPipe, "-stdin", stdinPipe, "-stderr", stderrPipe, "exec", "runc", bundlePath, filepath.Base(bundlePath))
+					cmd.Stdin = processJSONReader(specs.Process{
 						Args: []string{"/bin/sh", "-c", "cat <&0 1>&2"},
 						Cwd:  "/",
 					})
-					cmd := exec.Command(dadooBinPath, "-stdout", stdoutPipe, "-stdin", stdinPipe, "-stderr", stderrPipe, "-process", processJSONPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
 					_, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 					Expect(err).NotTo(HaveOccurred())
 
@@ -341,12 +341,12 @@ var _ = FDescribe("Dadoo", func() {
 
 			Describe("with a TTY", func() {
 				It("assigns a TTY to the process", func() {
-					processJSONPath = writeProcessJSON(bundlePath, specs.Process{
+					cmd := exec.Command(dadooBinPath, "-tty", "-stdout", stdoutPipe, "exec", "runc", bundlePath, filepath.Base(bundlePath))
+					cmd.Stdin = processJSONReader(specs.Process{
 						Args:     []string{"/bin/sh", "-c", "stty -a"},
 						Cwd:      "/",
 						Terminal: true,
 					})
-					cmd := exec.Command(dadooBinPath, "-tty", "-stdout", stdoutPipe, "-process", processJSONPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
 					sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 					Expect(err).NotTo(HaveOccurred())
 
@@ -363,11 +363,11 @@ var _ = FDescribe("Dadoo", func() {
 				})
 
 				It("forwards stdout and stdin to the pipes", func() {
-					processJSONPath = writeProcessJSON(bundlePath, specs.Process{
+					cmd := exec.Command(dadooBinPath, "-tty", "-stdout", stdoutPipe, "-stdin", stdinPipe, "exec", "runc", bundlePath, filepath.Base(bundlePath))
+					cmd.Stdin = processJSONReader(specs.Process{
 						Args: []string{"/bin/sh", "-c", "cat <&0"},
 						Cwd:  "/",
 					})
-					cmd := exec.Command(dadooBinPath, "-tty", "-stdout", stdoutPipe, "-stdin", stdinPipe, "-process", processJSONPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
 					_, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 					Expect(err).NotTo(HaveOccurred())
 
@@ -386,6 +386,23 @@ var _ = FDescribe("Dadoo", func() {
 					Expect(string(stdout)).To(Equal("hello"))
 				})
 			})
+		})
+
+		It("does not leak any files in the bundle directory", func() {
+			entries, err := ioutil.ReadDir(bundlePath)
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd := exec.Command(dadooBinPath, "exec", "runc", bundlePath, filepath.Base(bundlePath))
+			cmd.Stdin = processJSONReader(specs.Process{
+				Args: []string{"/bin/sh", "-c", "exit 0"},
+				Cwd:  "/",
+			})
+			sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+			Eventually(sess).Should(gexec.Exit(0))
+
+			newEntries, err := ioutil.ReadDir(bundlePath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(entries).To(HaveLen(len(newEntries)))
 		})
 	})
 })
@@ -406,9 +423,9 @@ func setupCgroups() error {
 	return starter.Start()
 }
 
-func writeProcessJSON(bundlePath string, spec specs.Process) string {
-	processJSON, err := os.Create(filepath.Join(bundlePath, "process.json"))
+func processJSONReader(spec specs.Process) io.Reader {
+	data, err := json.Marshal(spec)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(json.NewEncoder(processJSON).Encode(spec)).To(Succeed())
-	return processJSON.Name()
+
+	return bytes.NewBuffer(data)
 }

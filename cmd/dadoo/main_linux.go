@@ -22,13 +22,11 @@ func main() {
 
 	var (
 		stdoutPath, stdinPath, stderrPath string
-		processJSONPath                   string
 		isTTY                             bool
 	)
 	flag.StringVar(&stdoutPath, "stdout", "", "path to stdout")
 	flag.StringVar(&stdinPath, "stdin", "", "path to stdin")
 	flag.StringVar(&stderrPath, "stderr", "", "path to stderr")
-	flag.StringVar(&processJSONPath, "process", "", "path to the process.json file")
 	flag.BoolVar(&isTTY, "tty", false, "create a TTY")
 
 	flag.Parse()
@@ -99,7 +97,14 @@ func main() {
 		}
 	}
 
-	if processJSONPath != "" {
+	var processJSONPath string
+	if command == "exec" {
+		processJSONContents, _ := ioutil.ReadAll(os.Stdin)
+		f, _ := ioutil.TempFile(bundlePath, "process-")
+		f.Write(processJSONContents)
+		f.Close()
+		processJSONPath = f.Name()
+
 		runcArgs = append(runcArgs, "-process", processJSONPath)
 	}
 
@@ -126,6 +131,10 @@ func main() {
 
 				if status.ExitStatus() != 0 {
 					os.Exit(3) // nothing to wait for, container didn't launch
+				}
+
+				if processJSONPath != "" {
+					os.Remove(processJSONPath)
 				}
 
 				containerPid, err = readPid(pidFilePath)
