@@ -84,15 +84,15 @@ func main() {
 	}
 
 	if isTTY {
-		p, t, _ := pty.Open()
-		runcArgs = append(runcArgs, "-tty", "-console", t.Name())
+		m, s, _ := pty.Open()
+		runcArgs = append(runcArgs, "-tty", "-console", s.Name())
 
 		if runcCmd.Stdout != nil {
-			go io.Copy(runcCmd.Stdout, p)
+			go io.Copy(runcCmd.Stdout, m)
 			runcCmd.Stdout = nil
 		}
 		if runcCmd.Stdin != nil {
-			go io.Copy(p, runcCmd.Stdin)
+			go io.Copy(m, runcCmd.Stdin)
 			runcCmd.Stdin = nil
 		}
 	}
@@ -100,15 +100,19 @@ func main() {
 	var processJSONPath string
 	if command == "exec" {
 		processJSONContents, _ := ioutil.ReadAll(os.Stdin)
-		f, _ := ioutil.TempFile(bundlePath, "process-")
+		f, err := ioutil.TempFile(bundlePath, "process-")
+		if err != nil {
+			panic(err)
+		}
 		f.Write(processJSONContents)
-		f.Close()
+		defer f.Close()
 		processJSONPath = f.Name()
 
 		runcArgs = append(runcArgs, "-process", processJSONPath)
 	}
 
 	runcCmd.Args = append(runcCmd.Args, append(runcArgs, containerId)...)
+	fmt.Printf("runcCommand: %s %#v", runcCmd.Path, runcCmd.Args)
 	if err := runcCmd.Start(); err != nil {
 		fd3.Write([]byte{2})
 		os.Exit(2)
