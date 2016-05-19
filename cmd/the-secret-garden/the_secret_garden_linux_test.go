@@ -166,4 +166,31 @@ var _ = Describe("The Secret Garden", func() {
 			Expect(session.Out).To(gbytes.Say("shared/myfile"))
 		})
 	})
+
+	Context("when the secret garden is terminated", func() {
+		var sharedDir string
+
+		const processes = `#!/bin/bash
+			trap "echo terminating; exit 0" SIGTERM
+
+			echo 'sleeping'
+			sleep 1000 &
+			wait
+		`
+
+		BeforeEach(func() {
+			stubProcess = filepath.Join(fakeDataDir, "spawn-processes.sh")
+			sharedDir = filepath.Join(fakeDataDir, "shared")
+			Expect(ioutil.WriteFile(stubProcess, []byte(processes), 0777)).To(Succeed())
+		})
+
+		It("should kill the underlying process", func() {
+			session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, stubProcess, sharedDir)
+			Eventually(session.Out).Should(gbytes.Say("sleeping"))
+
+			session.Terminate()
+
+			Eventually(session.Out).Should(gbytes.Say("terminating"))
+		})
+	})
 })

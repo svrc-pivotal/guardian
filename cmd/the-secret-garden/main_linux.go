@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"syscall"
 
@@ -24,6 +25,7 @@ func namespaced() {
 	cmd := exec.Command(os.Args[4], os.Args[5:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	forwardSignals(cmd, syscall.SIGTERM)
 
 	mustRun(exec.Command("mount", "--make-slave", dataDir))
 
@@ -54,6 +56,7 @@ func reexecInNamespace(args ...string) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWNS,
 	}
+	forwardSignals(cmd, syscall.SIGTERM)
 
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("exec secret garden: %s\n", err)
@@ -85,4 +88,12 @@ func mustRun(cmd *exec.Cmd) string {
 	}
 
 	return string(out)
+}
+
+func forwardSignals(cmd *exec.Cmd, signals ...os.Signal) {
+	c := make(chan os.Signal)
+	signal.Notify(c, signals...)
+	go func() {
+		cmd.Process.Signal(<-c)
+	}()
 }
