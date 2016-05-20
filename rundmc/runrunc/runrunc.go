@@ -14,7 +14,8 @@ type RunRunc struct {
 	commandRunner command_runner.CommandRunner
 	runc          RuncBinary
 
-	*Execer
+	RuncExecer
+
 	*Starter
 	*OomWatcher
 	*Statser
@@ -31,10 +32,10 @@ type RuncBinary interface {
 	KillCommand(id, signal, logFile string) *exec.Cmd
 }
 
-func New(runner command_runner.CommandRunner, runcCmdRunner RuncCmdRunner, runc RuncBinary, dadooPath, runcPath string, execPreparer *ExecPreparer, execRunner *ExecRunner) *RunRunc {
+func New(runner command_runner.CommandRunner, runcCmdRunner RuncCmdRunner, runc RuncBinary, dadooPath, runcPath string, runcExecer RuncExecer) *RunRunc {
 	return &RunRunc{
-		Starter: NewStarter(dadooPath, runcPath, runner),
-		Execer:  NewExecer(execPreparer, execRunner),
+		Starter:    NewStarter(dadooPath, runcPath, runner),
+		RuncExecer: runcExecer,
 
 		OomWatcher: NewOomWatcher(runner, runc),
 		Statser:    NewStatser(runcCmdRunner, runc),

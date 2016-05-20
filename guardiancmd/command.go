@@ -534,16 +534,29 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, iodae
 		SleepInterval: time.Millisecond * 100,
 	}
 
+	pidGenerator := cmd.wireUidGenerator()
+
+	iodaemonRuncExecer := runrunc.NewExecer(
+		runrunc.NewExecPreparer(&goci.BndlLoader{}, runrunc.LookupFunc(runrunc.LookupUser), chrootMkdir, NonRootMaxCaps),
+		runrunc.NewExecRunner(pidGenerator, goci.RuncBinary(runcPath),
+			process_tracker.New(path.Join(os.TempDir(), fmt.Sprintf("garden-%s", cmd.Server.Tag), "processes"), iodaemonPath, commandRunner, pidFileReader),
+			&runrunc.Watcher{}),
+	)
+
+	dadooRuncExecer := dadoo.NewExecer(commandRunner, pidGenerator)
+
+	distributingRuncExecer := runrunc.NewDistributingExecer(
+		iodaemonRuncExecer,
+		dadooRuncExecer,
+	)
+
 	runcrunner := runrunc.New(
 		commandRunner,
 		runrunc.NewLogRunner(commandRunner, runrunc.LogDir(os.TempDir()).GenerateLogFile),
 		goci.RuncBinary(runcPath),
 		dadooPath,
 		runcPath,
-		runrunc.NewExecPreparer(&goci.BndlLoader{}, runrunc.LookupFunc(runrunc.LookupUser), chrootMkdir, NonRootMaxCaps),
-		runrunc.NewExecRunner(cmd.wireUidGenerator(), goci.RuncBinary(runcPath),
-			process_tracker.New(path.Join(os.TempDir(), fmt.Sprintf("garden-%s", cmd.Server.Tag), "processes"), iodaemonPath, commandRunner, pidFileReader),
-			&runrunc.Watcher{}),
+		distributingRuncExecer,
 	)
 
 	mounts := []specs.Mount{

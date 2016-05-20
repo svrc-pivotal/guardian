@@ -17,6 +17,16 @@ import (
 func main() {
 	var logFile string
 	flag.StringVar(&logFile, "log", "dadoo.log", "dadoo log file path")
+
+	var (
+		stdoutPath, stdinPath, stderrPath string
+		processJSONPath                   string
+	)
+	flag.StringVar(&stdoutPath, "stdout", "", "path to stdout")
+	flag.StringVar(&stdinPath, "stdin", "", "path to stdin")
+	flag.StringVar(&stderrPath, "stderr", "", "path to stderr")
+	flag.StringVar(&processJSONPath, "process", "", "path to the process.json file")
+
 	flag.Parse()
 
 	command := flag.Args()[0] // e.g. run
@@ -24,7 +34,7 @@ func main() {
 	bundlePath := flag.Args()[2]
 	containerId := flag.Args()[3]
 
-	if command != "run" {
+	if command != "run" && command != "exec" {
 		fmt.Fprintf(os.Stderr, "unknown command: %s", command)
 		os.Exit(127)
 	}
@@ -39,20 +49,52 @@ func main() {
 	// we need to be the subreaper so we can wait on the detached container process
 	system.SetSubreaper(os.Getpid())
 
-	// listen to an exit socket early so waiters can wait for dadoo
-	dadoo.Listen(filepath.Join(bundlePath, "exit.sock"))
+	var runcCmd *exec.Cmd
+	if command == "run" {
+		// listen to an exit socket early so waiters can wait for dadoo
+		dadoo.Listen(filepath.Join(bundlePath, "exit.sock"))
+		runcCmd = exec.Command(runtime, "-debug", "-log", logFile, "start")
+	}
 
-	runcStartCmd := exec.Command(runtime, "-debug", "-log", logFile, "start", "-d", "-pid-file", pidFilePath, containerId)
-	runcStartCmd.Dir = bundlePath
+	if command == "exec" {
+		runcCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec")
+	}
 
-	if err := runcStartCmd.Start(); err != nil {
+	runcArgs := []string{"-d", "-pid-file", pidFilePath}
+	runcCmd.Dir = bundlePath
+	runcCmd.Stdout = os.Stdout
+	runcCmd.Stderr = os.Stderr
+
+	if stdinPath != "" {
+		stdin, err := os.Open(stdinPath)
+		check(err)
+		runcCmd.Stdin = stdin
+	}
+
+	if stdoutPath != "" {
+		stdout, err := os.OpenFile(stdoutPath, os.O_WRONLY|os.O_APPEND, 0600)
+		check(err)
+		runcCmd.Stdout = stdout
+	}
+
+	if stderrPath != "" {
+		stderr, err := os.OpenFile(stderrPath, os.O_WRONLY|os.O_APPEND, 0600)
+		check(err)
+		runcCmd.Stderr = stderr
+	}
+
+	if processJSONPath != "" {
+		runcArgs = append(runcArgs, "-process", processJSONPath)
+	}
+
+	runcCmd.Args = append(runcCmd.Args, append(runcArgs, containerId)...)
+	if err := runcCmd.Start(); err != nil {
 		fd3.Write([]byte{2})
 		os.Exit(2)
 	}
 
 	containerPid := -2
 	for range signals {
-
 		exits := make(map[int]int)
 		for {
 			var status syscall.WaitStatus
@@ -63,7 +105,7 @@ func main() {
 				break // wait for next SIGCHLD
 			}
 
-			if wpid == runcStartCmd.Process.Pid {
+			if wpid == runcCmd.Process.Pid {
 				fd3.Write([]byte{byte(status.ExitStatus())})
 
 				if status.ExitStatus() != 0 {

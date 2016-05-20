@@ -23,6 +23,7 @@ import (
 //go:generate counterfeiter . BundleLoader
 //go:generate counterfeiter . ProcessTracker
 //go:generate counterfeiter . Process
+//go:generate counterfeiter . RuncExecer
 
 type UidGenerator interface {
 	Generate() string
@@ -54,6 +55,11 @@ type ProcessTracker interface {
 	Attach(processID string, io garden.ProcessIO, pidFilePath string) (garden.Process, error)
 }
 
+type RuncExecer interface {
+	Exec(log lager.Logger, bundlePath, handle string, spec garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error)
+	Attach(log lager.Logger, bundlePath, handle, processID string, io garden.ProcessIO) (garden.Process, error)
+}
+
 type Execer struct {
 	preparer *ExecPreparer
 	runner   *ExecRunner
@@ -79,8 +85,7 @@ func (e *Execer) Exec(log lager.Logger, bundlePath, id string, spec garden.Proce
 		return nil, err
 	}
 
-	processesPath := path.Join(bundlePath, "processes")
-	return e.runner.Run(log, preparedSpec, processesPath, id, spec.TTY, io)
+	return e.runner.Run(log, preparedSpec, bundlePath, id, spec.TTY, io)
 }
 
 // Attach attaches to an already running process by guid
@@ -106,13 +111,15 @@ func NewExecRunner(pidGen UidGenerator, runc RuncBinary, tracker ProcessTracker,
 }
 
 // runrunc saves a process.json and invokes runc exec
-func (e *ExecRunner) Run(log lager.Logger, spec *specs.Process, processesPath, handle string, tty *garden.TTYSpec, io garden.ProcessIO) (garden.Process, error) {
+func (e *ExecRunner) Run(log lager.Logger, spec *specs.Process, bundlePath, handle string, tty *garden.TTYSpec, io garden.ProcessIO) (garden.Process, error) {
 	pid := e.pidGenerator.Generate()
 
 	log = log.Session("execrunner", lager.Data{"pid": pid})
 
 	log.Info("start")
 	defer log.Info("finished")
+
+	processesPath := filepath.Join(bundlePath, "processes")
 
 	if err := os.MkdirAll(processesPath, 0755); err != nil {
 		log.Error("mk-processes-dir-failed", err)
