@@ -23,7 +23,7 @@ var defaultRuntime = map[string]string{
 
 var ginkgoIO = garden.ProcessIO{Stdout: GinkgoWriter, Stderr: GinkgoWriter}
 
-var ociRuntimeBin, gardenBin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, inspectorGardenBin string
+var ociRuntimeBin, gardenBin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, inspectorGardenBin, theSecretGardenBin string
 
 func TestGqt(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -56,6 +56,9 @@ func TestGqt(t *testing.T) {
 			bins["inspector-garden_bin_path"], err = gexec.Build("github.com/cloudfoundry-incubator/guardian/cmd/inspector-garden")
 			Expect(err).NotTo(HaveOccurred())
 
+			bins["the-secret-garden_bin_path"], err = gexec.Build("github.com/cloudfoundry-incubator/guardian/cmd/the-secret-garden")
+			Expect(err).NotTo(HaveOccurred())
+
 			cmd := exec.Command("make")
 			cmd.Dir = "../rundmc/nstar"
 			cmd.Stdout = GinkgoWriter
@@ -80,6 +83,7 @@ func TestGqt(t *testing.T) {
 		kawasakiBin = bins["kawasaki_bin_path"]
 		initBin = bins["init_bin_path"]
 		inspectorGardenBin = bins["inspector-garden_bin_path"]
+		theSecretGardenBin = bins["the-secret-garden_bin_path"]
 	})
 
 	BeforeEach(func() {
@@ -101,7 +105,7 @@ func TestGqt(t *testing.T) {
 }
 
 func startGarden(argv ...string) *runner.RunningGarden {
-	return runner.Start(gardenBin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, true, argv...)
+	return runner.Start(theSecretGardenBin, gardenBin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, true, argv...)
 }
 
 func restartGarden(client *runner.RunningGarden, argv ...string) {
@@ -111,5 +115,5 @@ func restartGarden(client *runner.RunningGarden, argv ...string) {
 }
 
 func startGardenWithoutDefaultRootfs(argv ...string) *runner.RunningGarden {
-	return runner.Start(gardenBin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, false, argv...)
+	return runner.Start(theSecretGardenBin, gardenBin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, false, argv...)
 }

@@ -52,7 +52,7 @@ type RunningGarden struct {
 	logger lager.Logger
 }
 
-func Start(bin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin string, supplyDefaultRootfs bool, argv ...string) *RunningGarden {
+func Start(theSecretGardenBin, bin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin string, supplyDefaultRootfs bool, argv ...string) *RunningGarden {
 	network := "unix"
 	addr := fmt.Sprintf("/tmp/garden_%d.sock", GinkgoParallelNode())
 	tmpDir := filepath.Join(
@@ -67,6 +67,8 @@ func Start(bin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin string, su
 		GraphRoot = "/tmp/aufs_mount"
 	}
 
+	realGraphParentPath := filepath.Join(GraphRoot, fmt.Sprintf("node-%d-real-graph", ginkgo.GinkgoParallelNode()))
+	realGraphPath := filepath.Join(GraphRoot, fmt.Sprintf("node-%d-real-graph", ginkgo.GinkgoParallelNode()), "graph")
 	graphPath := filepath.Join(GraphRoot, fmt.Sprintf("node-%d", ginkgo.GinkgoParallelNode()))
 	depotDir := filepath.Join(tmpDir, "containers")
 
@@ -149,7 +151,7 @@ func (r *RunningGarden) Stop() error {
 	return err
 }
 
-func cmd(tmpdir, depotDir, graphPath, network, addr, bin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, tarBin string, supplyDefaultRootfs bool, argv ...string) *exec.Cmd {
+func cmd(theSecretGardenBin, graphRoot, realGraphParentPath, realGraphPath, tmpdir, depotDir, graphPath, network, addr, bin, initBin, kawasakiBin, iodaemonBin, nstarBin, dadooBin, tarBin string, supplyDefaultRootfs bool, argv ...string) *exec.Cmd {
 	Expect(os.MkdirAll(tmpdir, 0755)).To(Succeed())
 
 	snapshotsPath := filepath.Join(tmpdir, "snapshots")
