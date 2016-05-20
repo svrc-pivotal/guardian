@@ -4,6 +4,7 @@ import "net"
 
 type WaitWatcher struct{}
 
+// How do we return the exit code?
 func (ww *WaitWatcher) Wait(path string) (<-chan struct{}, error) {
 	c, err := net.Dial("unix", path)
 	if err != nil {

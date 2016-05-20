@@ -2,35 +2,32 @@ package dadoo
 
 import (
 	"errors"
-	"os"
-	"os/exec"
 
 	"github.com/cloudfoundry-incubator/garden"
 )
 
 type Process struct {
-	id          string
-	command     *exec.Cmd
-	exitStatusR *os.File
+	exitWaiter ExitWaiter
+	processId  string
+	waitSock   string
 }
 
-func NewProcess(id string) *Process {
+func NewProcess(exitWaiter ExitWaiter, processId, waitSock string) *Process {
 	return &Process{
-		id: id,
+		exitWaiter: exitWaiter,
+		processId:  processId,
+		waitSock:   waitSock,
 	}
 }
 
 func (p *Process) ID() string {
-	return p.id
+	return p.processId
 }
 
 func (p *Process) Wait() (int, error) {
-	err := p.command.Wait()
-
-	exitStatusBytes := make([]byte, 1)
-	p.exitStatusR.Read(exitStatusBytes)
-
-	return int(exitStatusBytes[0]), err
+	ch, _ := p.exitWaiter.Wait(p.waitSock)
+	<-ch
+	return -1, nil
 }
 
 func (p *Process) SetTTY(garden.TTYSpec) error {
@@ -39,17 +36,4 @@ func (p *Process) SetTTY(garden.TTYSpec) error {
 
 func (p *Process) Signal(garden.Signal) error {
 	return errors.New("Not Implemented")
-}
-
-func (p *Process) Start(cmd *exec.Cmd) error {
-	exitStatusR, exitStatusW, _ := os.Pipe()
-
-	p.command = cmd
-	p.exitStatusR = exitStatusR
-
-	cmd.ExtraFiles = []*os.File{
-		exitStatusW,
-	}
-	return cmd.Start()
-
 }

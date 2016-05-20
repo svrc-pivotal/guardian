@@ -34,9 +34,12 @@ var _ = Describe("Run", func() {
 	DescribeTable("running a process",
 		func(spec garden.ProcessSpec, matchers ...func(actual interface{})) {
 			client = startGarden()
+			fmt.Println("before creating a container")
 			container, err := client.Create(garden.ContainerSpec{})
 			Expect(err).NotTo(HaveOccurred())
+			fmt.Println("after creating a container")
 
+			fmt.Println("before starting a process")
 			out := gbytes.NewBuffer()
 			proc, err := container.Run(
 				spec,
@@ -45,8 +48,11 @@ var _ = Describe("Run", func() {
 					Stderr: io.MultiWriter(GinkgoWriter, out),
 				})
 			Expect(err).NotTo(HaveOccurred())
+			fmt.Println("after starting a process")
 
+			fmt.Println("before wait")
 			exitCode, err := proc.Wait()
+			fmt.Println("after wait")
 			Expect(err).NotTo(HaveOccurred())
 
 			for _, m := range matchers {
@@ -54,7 +60,7 @@ var _ = Describe("Run", func() {
 			}
 		},
 
-		Entry("with an absolute path",
+		FEntry("with an absolute path",
 			spec("/bin/sh", "-c", "echo hello; exit 12"),
 			should(gbytes.Say("hello"), gexec.Exit(12)),
 		),

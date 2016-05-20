@@ -17,15 +17,24 @@ import (
 	"github.com/pivotal-golang/lager"
 )
 
-type DadooExecer struct {
-	runner       command_runner.CommandRunner
-	pidGenerator runrunc.UidGenerator
+//go:generate counterfeiter . ExitWaiter
+type ExitWaiter interface {
+	Wait(path string) (<-chan struct{}, error)
 }
 
-func NewExecer(runner command_runner.CommandRunner, pidGenerator runrunc.UidGenerator) *DadooExecer {
+type DadooExecer struct {
+	dadooPath    string
+	runner       command_runner.CommandRunner
+	pidGenerator runrunc.UidGenerator
+	exitWaiter   ExitWaiter
+}
+
+func NewExecer(dadooPath string, runner command_runner.CommandRunner, pidGenerator runrunc.UidGenerator, exitWaiter ExitWaiter) *DadooExecer {
 	return &DadooExecer{
 		runner:       runner,
 		pidGenerator: pidGenerator,
+		dadooPath:    dadooPath,
+		exitWaiter:   exitWaiter,
 	}
 }
 
@@ -51,35 +60,41 @@ func (d *DadooExecer) Exec(log lager.Logger, bundlePath, handle string, spec gar
 		panic(err)
 	}
 
-	cmd := exec.Command("dadoo", "-stdin", stdinPipe, "-stdout", stdoutPipe, "-stderr", stderrPipe, "exec", "runc", bundlePath, handle)
+	waitSock := filepath.Join(bundlePath, "processes", fmt.Sprintf("%s.sock", processId))
 
-	// process.Start
-	process := NewProcess(processId)
-	process.Start(cmd)
+	cmd := exec.Command(d.dadooPath, "-stdin", stdinPipe, "-stdout", stdoutPipe, "-stderr", stderrPipe, "-waitSock", waitSock, "exec", "runc", bundlePath, handle)
+	cmd.Stdout = os.Stdout
+
+	process := NewProcess(d.exitWaiter, processId, waitSock)
 
 	bytes, _ := json.Marshal(spec)
 	processJSON := strings.NewReader(string(bytes))
-
 	cmd.Stdin = processJSON
 
-	// if err := d.runner.Start(cmd); err != nil {
-	// 	panic(err)
-	// }
+	if err := d.runner.Start(cmd); err != nil {
+		panic(err)
+	}
 
+	fmt.Println("openning stdin pipe")
 	stdinP, err := os.OpenFile(stdinPipe, os.O_WRONLY, 0600)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("stdin pipe is open")
 
+	fmt.Println("openning stdout pipe")
 	stdoutP, err := os.Open(stdoutPipe)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("stdout pipe is open")
 
+	fmt.Println("openning stderr pipe")
 	stderrP, err := os.Open(stderrPipe)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("stderr pipe is open")
 
 	// process.Attach
 	if processIO.Stdin != nil {

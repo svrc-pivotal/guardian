@@ -543,7 +543,7 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, iodae
 			&runrunc.Watcher{}),
 	)
 
-	dadooRuncExecer := dadoo.NewExecer(commandRunner, pidGenerator)
+	dadooRuncExecer := dadoo.NewExecer(dadooPath, commandRunner, pidGenerator)
 
 	distributingRuncExecer := runrunc.NewDistributingExecer(
 		iodaemonRuncExecer,
