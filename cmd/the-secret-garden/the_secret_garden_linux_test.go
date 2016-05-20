@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -25,6 +27,7 @@ var _ = Describe("The Secret Garden", func() {
 
 	runSecretGarden := func(dataDir, realGraphDir, graphDir, bin string, args ...string) *gexec.Session {
 		cmd := exec.Command(theSecretGardenBin, append([]string{dataDir, realGraphDir, graphDir, bin}, args...)...)
+		cmd.Env = append(os.Environ(), "BAR=foo")
 		sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -63,7 +66,7 @@ var _ = Describe("The Secret Garden", func() {
 
 	It("exits non-zero when it fails to mount --make-shared", func() {
 		session = runSecretGarden("nnonexistent-dir", realGraphDir, graphDir, "pwd")
-		Eventually(session).Should(gexec.Exit(2))
+		Eventually(session).ShouldNot(gexec.Exit(0))
 	})
 
 	It("mounts the realgraph/graph on the graph path exactly once", func() {
@@ -81,13 +84,18 @@ var _ = Describe("The Secret Garden", func() {
 
 	It("exits non-zero when it fails to mount the graph", func() {
 		session = runSecretGarden(fakeDataDir, "no-such-dir", graphDir, "mount")
-		Eventually(session).Should(gexec.Exit(2))
+		Eventually(session).ShouldNot(gexec.Exit(0))
 	})
 
 	It("exits non-zero when the command it execs fails", func() {
 		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "no-such-cmd")
-		Eventually(session).Should(gexec.Exit(1))
-		Expect(session.Out).To(gbytes.Say("exec secret garden: exit status 1"))
+		Eventually(session).ShouldNot(gexec.Exit(0))
+	})
+
+	It("passes the correct environment to the final process", func() {
+		session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, "sh", "-c", "echo $BAR")
+		Eventually(session.Out).Should(gbytes.Say("foo"))
+		Eventually(session).ShouldNot(gexec.Exit(0))
 	})
 
 	Context("when the process creates a mount", func() {
@@ -164,6 +172,63 @@ var _ = Describe("The Secret Garden", func() {
 
 			Eventually(session, "10s").Should(gexec.Exit(0))
 			Expect(session.Out).To(gbytes.Say("shared/myfile"))
+		})
+	})
+
+	Context("when the secret garden is terminated", func() {
+		var sharedDir string
+
+		const processes = `#!/bin/bash
+			trap "echo terminating; exit 0" SIGTERM
+
+			echo 'sleeping'
+			sleep 1000 &
+			wait
+		`
+
+		BeforeEach(func() {
+			stubProcess = filepath.Join(fakeDataDir, "spawn-processes.sh")
+			sharedDir = filepath.Join(fakeDataDir, "shared")
+			Expect(ioutil.WriteFile(stubProcess, []byte(processes), 0777)).To(Succeed())
+		})
+
+		It("should kill the underlying process", func() {
+			session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, stubProcess, sharedDir)
+			Eventually(session.Out).Should(gbytes.Say("sleeping"))
+
+			session.Terminate()
+
+			Eventually(session.Out).Should(gbytes.Say("terminating"))
+		})
+	})
+
+	Context("when the secret garden is killed", func() {
+		var sharedDir string
+
+		const processes = `#!/bin/bash
+			echo "PID: $$"
+			sleep 1000
+		`
+
+		BeforeEach(func() {
+			stubProcess = filepath.Join(fakeDataDir, "spawn-processes.sh")
+			sharedDir = filepath.Join(fakeDataDir, "shared")
+			Expect(ioutil.WriteFile(stubProcess, []byte(processes), 0777)).To(Succeed())
+		})
+
+		It("should kill the underlying process", func() {
+			session = runSecretGarden(fakeDataDir, realGraphDir, graphDir, stubProcess, sharedDir)
+			Eventually(session.Out).Should(gbytes.Say("PID: "))
+
+			contents, err := ioutil.ReadAll(session.Out)
+			Expect(err).NotTo(HaveOccurred())
+
+			pid, err := strconv.ParseInt(strings.TrimSpace(string(contents)), 10, 32)
+			Expect(err).NotTo(HaveOccurred())
+
+			session.Kill()
+
+			Eventually(fmt.Sprintf("/proc/%d", pid)).ShouldNot(BeADirectory())
 		})
 	})
 })

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
 	"syscall"
 
@@ -20,15 +21,16 @@ func init() {
 
 func namespaced() {
 	dataDir := os.Args[1]
-
-	cmd := exec.Command(os.Args[4], os.Args[5:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
 	mustRun(exec.Command("mount", "--make-slave", dataDir))
 
-	if err := cmd.Run(); err != nil {
-		fmt.Printf("%s: %s\n", cmd.Path, err)
+	programPath, err := exec.LookPath(os.Args[4])
+	if err != nil {
+		fmt.Printf("failed to look path in namespace : %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := syscall.Exec(programPath, os.Args[4:], os.Environ()); err != nil {
+		fmt.Printf("exec failed in namespace: %s\n", err)
 		os.Exit(1)
 	}
 }
@@ -53,10 +55,12 @@ func reexecInNamespace(args ...string) {
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWNS,
+		Pdeathsig:  syscall.SIGKILL,
 	}
+	forwardSignals(cmd, syscall.SIGTERM)
 
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("exec secret garden: %s\n", err)
+		fmt.Printf("secret garden exec failed: %s\n", err)
 		os.Exit(1)
 	}
 }
@@ -85,4 +89,12 @@ func mustRun(cmd *exec.Cmd) string {
 	}
 
 	return string(out)
+}
+
+func forwardSignals(cmd *exec.Cmd, signals ...os.Signal) {
+	c := make(chan os.Signal)
+	signal.Notify(c, signals...)
+	go func() {
+		cmd.Process.Signal(<-c)
+	}()
 }
