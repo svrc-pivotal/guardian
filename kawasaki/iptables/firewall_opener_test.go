@@ -6,7 +6,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
-	fakes "github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/iptablesfakes"
+	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/iptablesfakes"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -15,42 +15,43 @@ import (
 	"github.com/pivotal-golang/lager/lagertest"
 )
 
-var _ = Describe("FirewallOpenner", func() {
+var _ = Describe("FirewallOpener", func() {
 	var (
-		logger                 lager.Logger
-		fakeRunner             *fake_command_runner.FakeCommandRunner
-		fakeIPTablesController *fakes.FakeIPTables
-		opener                 *iptables.FirewallOpener
+		logger             lager.Logger
+		fakeRunner         *fake_command_runner.FakeCommandRunner
+		fakeIPTablesDriver *iptablesfakes.FakeIPTablesDriver
+		iptablesConfig     iptables.IPTablesConfig
+		opener             *iptables.FirewallOpener
 	)
 
 	BeforeEach(func() {
 		logger = lagertest.NewTestLogger("test")
 		fakeRunner = fake_command_runner.New()
 
-		fakeIPTablesController = new(fakes.FakeIPTables)
-		fakeIPTablesController.InstanceChainStub = func(chain string) string {
-			return "prefix-" + chain
-		}
+		fakeIPTablesDriver = new(iptablesfakes.FakeIPTablesDriver)
+		iptablesConfig = iptables.NewConfig("prefix-")
 
 		opener = iptables.NewFirewallOpener(
-			fakeIPTablesController,
+			iptablesConfig,
+			fakeIPTablesDriver,
 		)
 	})
 
 	Describe("Open", func() {
-		It("uses the correct chain name", func() {
+		It("uses the correct chain", func() {
 			Expect(opener.Open(logger, "foo-bar-baz", garden.NetOutRule{})).To(Succeed())
 
-			Expect(fakeIPTablesController.PrependRuleCallCount()).To(Equal(1))
-			chainName, _ := fakeIPTablesController.PrependRuleArgsForCall(0)
-			Expect(chainName).To(Equal("prefix-foo-bar-baz"))
+			Expect(fakeIPTablesDriver.PrependRuleCallCount()).To(Equal(1))
+			tableName, chainName, _ := fakeIPTablesDriver.PrependRuleArgsForCall(0)
+			Expect(tableName).To(Equal("filter"))
+			Expect(chainName).To(Equal(iptables.InstanceChain(iptablesConfig, "foo-bar-baz")))
 		})
 
 		It("applies the default rule", func() {
 			Expect(opener.Open(logger, "foo-bar-baz", garden.NetOutRule{})).To(Succeed())
 
-			Expect(fakeIPTablesController.PrependRuleCallCount()).To(Equal(1))
-			_, rule := fakeIPTablesController.PrependRuleArgsForCall(0)
+			Expect(fakeIPTablesDriver.PrependRuleCallCount()).To(Equal(1))
+			_, _, rule := fakeIPTablesDriver.PrependRuleArgsForCall(0)
 			Expect(rule).To(Equal(iptables.SingleFilterRule{}))
 		})
 
@@ -76,8 +77,8 @@ var _ = Describe("FirewallOpenner", func() {
 				Protocol: garden.ProtocolTCP,
 			})).To(Succeed())
 
-			Expect(fakeIPTablesController.PrependRuleCallCount()).To(Equal(1))
-			_, rule := fakeIPTablesController.PrependRuleArgsForCall(0)
+			Expect(fakeIPTablesDriver.PrependRuleCallCount()).To(Equal(1))
+			_, _, rule := fakeIPTablesDriver.PrependRuleArgsForCall(0)
 			Expect(rule).To(Equal(iptables.SingleFilterRule{
 				Protocol: garden.ProtocolTCP,
 			}))
@@ -92,8 +93,8 @@ var _ = Describe("FirewallOpenner", func() {
 				ICMPs: icmpControl,
 			})).To(Succeed())
 
-			Expect(fakeIPTablesController.PrependRuleCallCount()).To(Equal(1))
-			_, rule := fakeIPTablesController.PrependRuleArgsForCall(0)
+			Expect(fakeIPTablesDriver.PrependRuleCallCount()).To(Equal(1))
+			_, _, rule := fakeIPTablesDriver.PrependRuleArgsForCall(0)
 			Expect(rule).To(Equal(iptables.SingleFilterRule{
 				ICMPs: icmpControl,
 			}))
@@ -105,8 +106,8 @@ var _ = Describe("FirewallOpenner", func() {
 					Log: true,
 				})).To(Succeed())
 
-				Expect(fakeIPTablesController.PrependRuleCallCount()).To(Equal(1))
-				_, rule := fakeIPTablesController.PrependRuleArgsForCall(0)
+				Expect(fakeIPTablesDriver.PrependRuleCallCount()).To(Equal(1))
+				_, _, rule := fakeIPTablesDriver.PrependRuleArgsForCall(0)
 				Expect(rule).To(Equal(iptables.SingleFilterRule{
 					Log: true,
 				}))
@@ -115,7 +116,7 @@ var _ = Describe("FirewallOpenner", func() {
 
 		Context("when prepending the rule fails", func() {
 			BeforeEach(func() {
-				fakeIPTablesController.PrependRuleReturns(errors.New("i-lost-my-banana"))
+				fakeIPTablesDriver.PrependRuleReturns(errors.New("i-lost-my-banana"))
 			})
 
 			It("returns the error", func() {
@@ -127,11 +128,11 @@ var _ = Describe("FirewallOpenner", func() {
 			func(netOut garden.NetOutRule, rules []iptables.SingleFilterRule) {
 				Expect(opener.Open(logger, "foo-bar-baz", netOut)).To(Succeed())
 
-				n := fakeIPTablesController.PrependRuleCallCount()
+				n := fakeIPTablesDriver.PrependRuleCallCount()
 				Expect(n).To(Equal(len(rules)))
 
 				for i := 0; i < n; i++ {
-					_, appliedRule := fakeIPTablesController.PrependRuleArgsForCall(i)
+					_, _, appliedRule := fakeIPTablesDriver.PrependRuleArgsForCall(i)
 					Expect(appliedRule).To(Equal(rules[i]))
 				}
 			},

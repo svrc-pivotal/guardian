@@ -9,17 +9,19 @@ import (
 )
 
 type FirewallOpener struct {
-	iptables IPTables
+	config IPTablesConfig
+	driver IPTablesDriver
 }
 
-func NewFirewallOpener(iptables IPTables) *FirewallOpener {
+func NewFirewallOpener(config IPTablesConfig, driver IPTablesDriver) *FirewallOpener {
 	return &FirewallOpener{
-		iptables: iptables,
+		config: config,
+		driver: driver,
 	}
 }
 
 func (f *FirewallOpener) Open(logger lager.Logger, instance string, r garden.NetOutRule) error {
-	chain := f.iptables.InstanceChain(instance)
+	chain := InstanceChain(f.config, instance)
 
 	logger = logger.Session("prepend-filter-rule", lager.Data{"rule": r, "instance": instance, "chain": chain})
 	logger.Debug("started")
@@ -51,7 +53,7 @@ func (f *FirewallOpener) Open(logger lager.Logger, instance string, r garden.Net
 				filter.Networks = &r.Networks[j]
 			}
 
-			if err := f.iptables.PrependRule(chain, filter); err != nil {
+			if err := f.driver.PrependRule("filter", chain, filter); err != nil {
 				return err
 			}
 		}

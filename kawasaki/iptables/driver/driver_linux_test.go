@@ -1,10 +1,11 @@
-package iptables_test
+package driver_test
 
 import (
 	"fmt"
 	"os/exec"
 
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
+	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/driver"
 	fakes "github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/iptablesfakes"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	. "github.com/onsi/ginkgo"
@@ -13,18 +14,19 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("IPTables controller", func() {
+var _ = FDescribe("IPTables controller", func() {
 	var (
 		netnsName          string
 		prefix             string
-		iptablesController iptables.IPTables
+		fakeRunner         *fake_command_runner.FakeCommandRunner
+		iptablesController iptables.IPTablesDriver
 	)
 
 	BeforeEach(func() {
 		netnsName = fmt.Sprintf("ginkgo-netns-%d", GinkgoParallelNode())
 		makeNamespace(netnsName)
 
-		fakeRunner := fake_command_runner.New()
+		fakeRunner = fake_command_runner.New()
 		fakeRunner.WhenRunning(fake_command_runner.CommandSpec{},
 			func(cmd *exec.Cmd) error {
 				return wrapCmdInNs(netnsName, cmd).Run()
@@ -32,11 +34,16 @@ var _ = Describe("IPTables controller", func() {
 		)
 
 		prefix = fmt.Sprintf("g-%d", GinkgoParallelNode())
-		iptablesController = iptables.New(fakeRunner, prefix)
+		iptablesController = driver.New("/sbin/iptables", fakeRunner, prefix)
 	})
 
 	AfterEach(func() {
 		deleteNamespace(netnsName)
+	})
+
+	It("fails when a wrong iptables bin path is provided", func() {
+		iptablesController = driver.New("/path/to/iptables", fakeRunner, prefix)
+		Expect(iptablesController.CreateChain("filter", "test-chain")).NotTo(Succeed())
 	})
 
 	Describe("CreateChain", func() {
@@ -69,6 +76,33 @@ var _ = Describe("IPTables controller", func() {
 		})
 	})
 
+	Describe("AppendRule", func() {
+		It("appends the rule", func() {
+			fakeTCPRule := new(fakes.FakeRule)
+			fakeTCPRule.FlagsReturns([]string{"--protocol", "tcp"})
+			fakeUDPRule := new(fakes.FakeRule)
+			fakeUDPRule.FlagsReturns([]string{"--protocol", "udp"})
+
+			Expect(iptablesController.CreateChain("nat", "test-chain")).To(Succeed())
+
+			Expect(iptablesController.AppendRule("nat", "test-chain", fakeTCPRule)).To(Succeed())
+			Expect(iptablesController.AppendRule("nat", "test-chain", fakeUDPRule)).To(Succeed())
+
+			buff := gbytes.NewBuffer()
+			sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", "nat", "-S", "test-chain")), buff, GinkgoWriter)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess).Should(gexec.Exit(0))
+			Expect(buff).To(gbytes.Say("-A test-chain -p tcp\n-A test-chain -p udp"))
+		})
+
+		It("returns an error when the chain does not exist", func() {
+			fakeRule := new(fakes.FakeRule)
+			fakeRule.FlagsReturns([]string{})
+
+			Expect(iptablesController.AppendRule("filter", "test-chain", fakeRule)).NotTo(Succeed())
+		})
+	})
+
 	Describe("PrependRule", func() {
 		It("prepends the rule", func() {
 			fakeTCPRule := new(fakes.FakeRule)
@@ -76,13 +110,13 @@ var _ = Describe("IPTables controller", func() {
 			fakeUDPRule := new(fakes.FakeRule)
 			fakeUDPRule.FlagsReturns([]string{"--protocol", "udp"})
 
-			Expect(iptablesController.CreateChain("filter", "test-chain")).To(Succeed())
+			Expect(iptablesController.CreateChain("nat", "test-chain")).To(Succeed())
 
-			Expect(iptablesController.PrependRule("test-chain", fakeTCPRule)).To(Succeed())
-			Expect(iptablesController.PrependRule("test-chain", fakeUDPRule)).To(Succeed())
+			Expect(iptablesController.PrependRule("nat", "test-chain", fakeTCPRule)).To(Succeed())
+			Expect(iptablesController.PrependRule("nat", "test-chain", fakeUDPRule)).To(Succeed())
 
 			buff := gbytes.NewBuffer()
-			sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-S", "test-chain")), buff, GinkgoWriter)
+			sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", "nat", "-S", "test-chain")), buff, GinkgoWriter)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(sess).Should(gexec.Exit(0))
 			Expect(buff).To(gbytes.Say("-A test-chain -p udp\n-A test-chain -p tcp"))
@@ -92,7 +126,20 @@ var _ = Describe("IPTables controller", func() {
 			fakeRule := new(fakes.FakeRule)
 			fakeRule.FlagsReturns([]string{})
 
-			Expect(iptablesController.PrependRule("test-chain", fakeRule)).NotTo(Succeed())
+			Expect(iptablesController.PrependRule("filter", "test-chain", fakeRule)).NotTo(Succeed())
+		})
+	})
+
+	Describe("ChainExists", func() {
+		It("returns true when the chain exists", func() {
+			Expect(iptablesController.CreateChain("nat", "test-chain")).To(Succeed())
+			Expect(iptablesController.ChainExists("nat", "test-chain")).To(BeTrue())
+		})
+
+		Context("when the chain does not exist", func() {
+			It("returns false", func() {
+				Expect(iptablesController.ChainExists("nat", "test-chain")).To(BeFalse())
+			})
 		})
 	})
 
@@ -130,54 +177,6 @@ var _ = Describe("IPTables controller", func() {
 		})
 	})
 
-	Describe("FlushChain", func() {
-		var table string
-
-		BeforeEach(func() {
-			table = "filter"
-		})
-
-		JustBeforeEach(func() {
-			Expect(iptablesController.CreateChain(table, "test-chain")).To(Succeed())
-
-			sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", table, "-A", "test-chain", "-j", "ACCEPT")), GinkgoWriter, GinkgoWriter)
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(sess).Should(gexec.Exit(0))
-		})
-
-		It("flushes the chain", func() {
-			Expect(iptablesController.FlushChain(table, "test-chain")).To(Succeed())
-
-			buff := gbytes.NewBuffer()
-			sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", table, "-S", "test-chain")), buff, GinkgoWriter)
-			Expect(err).NotTo(HaveOccurred())
-			Eventually(sess).Should(gexec.Exit(0))
-			Consistently(buff).ShouldNot(gbytes.Say("-A test-chain"))
-		})
-
-		Context("when the table is nat", func() {
-			BeforeEach(func() {
-				table = "nat"
-			})
-
-			It("flushes the nat chain", func() {
-				Expect(iptablesController.FlushChain(table, "test-chain")).To(Succeed())
-
-				buff := gbytes.NewBuffer()
-				sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", table, "-S", "test-chain")), buff, GinkgoWriter)
-				Expect(err).NotTo(HaveOccurred())
-				Eventually(sess).Should(gexec.Exit(0))
-				Consistently(buff).ShouldNot(gbytes.Say("-A test-chain"))
-			})
-		})
-
-		Context("when the chain does not exist", func() {
-			It("does not return an error", func() {
-				Expect(iptablesController.FlushChain("filter", "test-non-existing-chain")).To(Succeed())
-			})
-		})
-	})
-
 	Describe("DeleteChainReferences", func() {
 		var table string
 
@@ -206,6 +205,95 @@ var _ = Describe("IPTables controller", func() {
 
 				return string(buff.Contents())
 			}).ShouldNot(ContainSubstring("test-chain-2"))
+		})
+	})
+
+	itFlushesTheChain := func(table, chain string) {
+		buff := gbytes.NewBuffer()
+		sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", table, "-S", chain)), buff, GinkgoWriter)
+		Expect(err).NotTo(HaveOccurred())
+		Eventually(sess).Should(gexec.Exit(0))
+		Consistently(buff).ShouldNot(gbytes.Say(fmt.Sprintf("-A %s", chain)))
+	}
+
+	Describe("FlushChain", func() {
+		var table string
+
+		BeforeEach(func() {
+			table = "filter"
+		})
+
+		JustBeforeEach(func() {
+			Expect(iptablesController.CreateChain(table, "test-chain")).To(Succeed())
+
+			sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", table, "-A", "test-chain", "-j", "ACCEPT")), GinkgoWriter, GinkgoWriter)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess).Should(gexec.Exit(0))
+		})
+
+		It("flushes the chain", func() {
+			Expect(iptablesController.FlushChain(table, "test-chain")).To(Succeed())
+
+			itFlushesTheChain(table, "test-chain")
+		})
+
+		Context("when the table is nat", func() {
+			BeforeEach(func() {
+				table = "nat"
+			})
+
+			It("flushes the nat chain", func() {
+				Expect(iptablesController.FlushChain(table, "test-chain")).To(Succeed())
+
+				buff := gbytes.NewBuffer()
+				sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", table, "-S", "test-chain")), buff, GinkgoWriter)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(sess).Should(gexec.Exit(0))
+				Consistently(buff).ShouldNot(gbytes.Say("-A test-chain"))
+			})
+		})
+
+		Context("when the chain does not exist", func() {
+			It("does not return an error", func() {
+				Expect(iptablesController.FlushChain("filter", "test-non-existing-chain")).To(Succeed())
+			})
+		})
+	})
+
+	Describe("ResetChain", func() {
+		var table string
+
+		BeforeEach(func() {
+			table = "filter"
+		})
+
+		JustBeforeEach(func() {
+			Expect(iptablesController.CreateChain(table, "test-chain")).To(Succeed())
+			Expect(iptablesController.AppendRule(table, "test-chain", iptables.IPTablesFlags{"-j", "REJECT"})).To(Succeed())
+		})
+
+		It("flushes the chain", func() {
+			Expect(iptablesController.ResetChain(table, "test-chain", []iptables.Rule{})).To(Succeed())
+
+			itFlushesTheChain(table, "test-chain")
+		})
+
+		It("appends new rules provided", func() {
+			Expect(iptablesController.ResetChain(table, "test-chain", []iptables.Rule{
+				iptables.IPTablesFlags{
+					"-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT",
+				},
+				iptables.IPTablesFlags{
+					"-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "REJECT",
+				},
+			})).To(Succeed())
+
+			buff := gbytes.NewBuffer()
+			sess, err := gexec.Start(wrapCmdInNs(netnsName, exec.Command("iptables", "-t", table, "-S", "test-chain")), buff, GinkgoWriter)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess).Should(gexec.Exit(0))
+			Expect(buff.Contents()).To(ContainSubstring(`-m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A test-chain -m conntrack --ctstate RELATED,ESTABLISHED -j REJECT`))
 		})
 	})
 })

@@ -2,32 +2,43 @@ package iptables
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/cloudfoundry-incubator/garden"
 )
 
-type iptablesFlags []string
+type IPTablesFlags []string
 
-func (flags iptablesFlags) Flags(chain string) []string {
+func (flags IPTablesFlags) Flags(chain string) []string {
 	return flags
 }
 
-func natRule(destination string, destinationPort uint32, containerIP string, containerPort uint32) Rule {
-	return iptablesFlags([]string{
-		"--table", "nat",
+type ForwardRule struct {
+	DestinationIP   net.IP
+	DestinationPort uint32
+	ContainerIP     net.IP
+	ContainerPort   uint32
+}
+
+func (r ForwardRule) Flags(chain string) []string {
+	return IPTablesFlags([]string{
 		"--protocol", "tcp",
-		"--destination", destination,
-		"--destination-port", fmt.Sprintf("%d", destinationPort),
+		"--destination", r.DestinationIP.String(),
+		"--destination-port", fmt.Sprintf("%d", r.DestinationPort),
 		"--jump", "DNAT",
-		"--to-destination", fmt.Sprintf("%s:%d", containerIP, containerPort),
+		"--to-destination", fmt.Sprintf("%s:%d", r.ContainerIP.String(), r.ContainerPort),
 	})
 }
 
-func rejectRule(destination string) Rule {
-	return iptablesFlags([]string{
-		"--destination", destination,
+type RejectRule struct {
+	DestinationIPNet *net.IPNet
+}
+
+func (r RejectRule) Flags(chain string) []string {
+	return []string{
+		"--destination", r.DestinationIPNet.String(),
 		"--jump", "REJECT",
-	})
+	}
 }
 
 type SingleFilterRule struct {

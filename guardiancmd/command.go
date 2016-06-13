@@ -158,6 +158,7 @@ type GuardianCommand struct {
 		Kawasaki FileFlag `long:"kawasaki-bin" required:"true" description:"Path to the 'kawasaki' network hook binary."`
 		Init     FileFlag `long:"init-bin"     required:"true" description:"Path execute as pid 1 inside each container."`
 		Runc     string   `long:"runc-bin"     default:"runc" description:"Path to the 'runc' binary."`
+		IPTables FileFlag `long:"iptables-bin" default:"" description:"Path to the 'iptables' binary."`
 	} `group:"Binary Tools"`
 
 	Graph struct {

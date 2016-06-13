@@ -20,6 +20,43 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
+var _ = FDescribe("Flags", func() {
+	var (
+		client *runner.RunningGarden
+		args   []string
+	)
+
+	BeforeEach(func() {
+		args = []string{}
+	})
+
+	JustBeforeEach(func() {
+		client = startGarden(args...)
+	})
+
+	FDescribe("--iptables-bin flag", func() {
+		Context("when the path is invalid", func() {
+			BeforeEach(func() {
+				args = append(args, "--iptables-bin", "/path/to/iptables/bin")
+			})
+
+			It("should fail to start the server", func() {
+				Expect(client.Ping()).NotTo(Succeed())
+			})
+		})
+
+		Context("when the path is valid but it's not iptables", func() {
+			BeforeEach(func() {
+				args = append(args, "--iptables-bin", "/bin/echo")
+			})
+
+			It("should fail to start the server", func() {
+				Expect(client.Ping()).NotTo(Succeed())
+			})
+		})
+	})
+})
+
 var _ = Describe("Net", func() {
 	var (
 		client    *runner.RunningGarden

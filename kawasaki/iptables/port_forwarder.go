@@ -3,23 +3,26 @@ package iptables
 import "github.com/cloudfoundry-incubator/guardian/kawasaki"
 
 type PortForwarder struct {
-	iptables *IPTablesController
+	config IPTablesConfig
+	driver IPTablesDriver
 }
 
-func NewPortForwarder(iptables *IPTablesController) *PortForwarder {
+func NewPortForwarder(config IPTablesConfig, driver IPTablesDriver) *PortForwarder {
 	return &PortForwarder{
-		iptables: iptables,
+		config: config,
+		driver: driver,
 	}
 }
 
 func (p *PortForwarder) Forward(spec kawasaki.PortForwarderSpec) error {
-	return p.iptables.appendRule(
-		p.iptables.InstanceChain(spec.InstanceID),
-		natRule(
-			spec.ExternalIP.String(),
-			spec.FromPort,
-			spec.ContainerIP.String(),
-			spec.ToPort,
-		),
+	return p.driver.AppendRule(
+		"nat",
+		InstanceChain(p.config, spec.InstanceID),
+		ForwardRule{
+			DestinationIP:   spec.ExternalIP,
+			DestinationPort: spec.FromPort,
+			ContainerIP:     spec.ContainerIP,
+			ContainerPort:   spec.ToPort,
+		},
 	)
 }

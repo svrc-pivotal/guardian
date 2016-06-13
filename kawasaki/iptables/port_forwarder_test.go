@@ -5,8 +5,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/guardian/kawasaki"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
-	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
-	. "github.com/cloudfoundry/gunk/command_runner/fake_command_runner/matchers"
+	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/iptablesfakes"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -14,15 +13,15 @@ import (
 
 var _ = Describe("PortForwarder", func() {
 	var (
-		fakeRunner *fake_command_runner.FakeCommandRunner
-		forwarder  *iptables.PortForwarder
+		fakeIPTablesConfig iptables.IPTablesConfig
+		fakeIPTablesDriver *iptablesfakes.FakeIPTablesDriver
+		forwarder          *iptables.PortForwarder
 	)
 
 	BeforeEach(func() {
-		fakeRunner = fake_command_runner.New()
-		forwarder = iptables.NewPortForwarder(
-			iptables.New(fakeRunner, "prefix-"),
-		)
+		fakeIPTablesConfig = iptables.NewConfig("prefix-")
+		fakeIPTablesDriver = new(iptablesfakes.FakeIPTablesDriver)
+		forwarder = iptables.NewPortForwarder(fakeIPTablesConfig, fakeIPTablesDriver)
 	})
 
 	It("adds a NAT rule to forward the port", func() {
@@ -34,20 +33,15 @@ var _ = Describe("PortForwarder", func() {
 			ToPort:      33,
 		})).To(Succeed())
 
-		Expect(fakeRunner).To(HaveExecutedSerially(
-			fake_command_runner.CommandSpec{
-				Path: "/sbin/iptables",
-				Args: []string{
-					"-w",
-					"-A", "prefix-instance-some-instance",
-					"--table", "nat",
-					"--protocol", "tcp",
-					"--destination", "5.6.7.8",
-					"--destination-port", "22",
-					"--jump", "DNAT",
-					"--to-destination", "1.2.3.4:33",
-				},
-			},
-		))
+		Expect(fakeIPTablesDriver.AppendRuleCallCount()).To(Equal(1))
+		table, chain, rule := fakeIPTablesDriver.AppendRuleArgsForCall(0)
+		Expect(table).To(Equal("nat"))
+		Expect(chain).To(Equal(iptables.InstanceChain(fakeIPTablesConfig, "some-instance")))
+		Expect(rule).To(Equal(iptables.ForwardRule{
+			DestinationIP:   net.ParseIP("5.6.7.8"),
+			ContainerIP:     net.ParseIP("1.2.3.4"),
+			DestinationPort: 22,
+			ContainerPort:   33,
+		}))
 	})
 })

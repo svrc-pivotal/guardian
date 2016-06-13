@@ -13,6 +13,33 @@ import (
 )
 
 var _ = Describe("Rules", func() {
+	Describe("IPTablesFlags Flags", func() {
+		It("returns the provided flags", func() {
+			flags := []string{
+				"this", "is", "an", "iptables", "rule",
+			}
+
+			rule := iptables.IPTablesFlags(flags)
+			Expect(rule.Flags("banana-chain")).To(Equal(flags))
+		})
+	})
+
+	Describe("RejectRule Flags", func() {
+		It("assigns the destination IP", func() {
+			_, net, err := net.ParseCIDR("1.2.3.4/30")
+			Expect(err).NotTo(HaveOccurred())
+
+			rule := iptables.RejectRule{
+				DestinationIPNet: net,
+			}
+
+			Expect(rule.Flags("banana-chain")).To(Equal([]string{
+				"--destination", "1.2.3.4/30",
+				"--jump", "REJECT",
+			}))
+		})
+	})
+
 	Describe("SingleFilterRule Flags", func() {
 		It("assigns the protocol", func() {
 			rule := iptables.SingleFilterRule{
@@ -138,6 +165,25 @@ var _ = Describe("Rules", func() {
 			Expect(rule.Flags(chain)).To(Equal([]string{
 				"--protocol", "tcp",
 				"--goto", fmt.Sprintf("%s-log", chain),
+			}))
+		})
+	})
+
+	Describe("ForwardRule Flags", func() {
+		It("assigns the destination IP", func() {
+			rule := iptables.ForwardRule{
+				DestinationIP:   net.ParseIP("5.6.7.8"),
+				ContainerIP:     net.ParseIP("1.2.3.4"),
+				DestinationPort: 22,
+				ContainerPort:   33,
+			}
+
+			Expect(rule.Flags("banana-chain")).To(Equal([]string{
+				"--protocol", "tcp",
+				"--destination", "5.6.7.8",
+				"--destination-port", "22",
+				"--jump", "DNAT",
+				"--to-destination", "1.2.3.4:33",
 			}))
 		})
 	})
