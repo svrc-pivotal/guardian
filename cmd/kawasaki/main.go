@@ -14,6 +14,7 @@ import (
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/dns"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/factory"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
+	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/driver"
 	"github.com/cloudfoundry-incubator/guardian/pkg/vars"
 	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	"github.com/docker/docker/pkg/reexec"
@@ -81,7 +82,13 @@ func main() {
 
 	logger.Info("start")
 
-	configurer := factory.NewDefaultConfigurer(iptables.New(linux_command_runner.New(), config.IPTablePrefix))
+	runner := linux_command_runner.New()
+	iptRunner := &iptables.IPTablesLoggingRunner{Runner: runner}
+	ipTablesDriver := driver.New("iptables", runner, config.IPTablePrefix)
+	ipTablesConfig := iptables.NewConfig(config.IPTablePrefix)
+	instanceChainCreator := iptables.NewInstanceChainCreator("iptables", ipTablesConfig, ipTablesDriver, iptRunner)
+
+	configurer := factory.NewDefaultConfigurer(*instanceChainCreator)
 	dnsResolvConfigurer := wireDNSResolvConfigurer(state, config)
 	hookActioner := &kawasaki.HookActioner{
 		Configurer:          configurer,

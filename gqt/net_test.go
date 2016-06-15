@@ -20,7 +20,7 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
-var _ = FDescribe("Flags", func() {
+var _ = Describe("Flags", func() {
 	var (
 		client *runner.RunningGarden
 		args   []string
@@ -34,7 +34,7 @@ var _ = FDescribe("Flags", func() {
 		client = startGarden(args...)
 	})
 
-	FDescribe("--iptables-bin flag", func() {
+	Describe("--iptables-bin flag", func() {
 		Context("when the path is invalid", func() {
 			BeforeEach(func() {
 				args = append(args, "--iptables-bin", "/path/to/iptables/bin")

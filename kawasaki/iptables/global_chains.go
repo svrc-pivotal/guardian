@@ -222,27 +222,27 @@ func NewStarter(iptablesBin string, config IPTablesConfig, driver IPTablesDriver
 
 func (s Starter) Start() error {
 
-	if s.driver.ChainExists("filter", s.config.InputChain) {
-		return nil
-	}
+	if !s.driver.ChainExists("filter", s.config.InputChain) {
 
-	cmd := exec.Command("bash", "-c", SetupScript)
-	cmd.Env = []string{
-		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
-		"ACTION=setup",
-		fmt.Sprintf("GARDEN_IPTABLES_BIN=%s", s.iptablesBin),
-		fmt.Sprintf("GARDEN_IPTABLES_FILTER_INPUT_CHAIN=%s", s.config.InputChain),
-		fmt.Sprintf("GARDEN_IPTABLES_FILTER_FORWARD_CHAIN=%s", s.config.ForwardChain),
-		fmt.Sprintf("GARDEN_IPTABLES_FILTER_DEFAULT_CHAIN=%s", s.config.DefaultChain),
-		fmt.Sprintf("GARDEN_IPTABLES_FILTER_INSTANCE_PREFIX=%s", s.config.InstanceChainPrefix),
-		fmt.Sprintf("GARDEN_IPTABLES_NAT_PREROUTING_CHAIN=%s", s.config.PreroutingChain),
-		fmt.Sprintf("GARDEN_IPTABLES_NAT_POSTROUTING_CHAIN=%s", s.config.PostroutingChain),
-		fmt.Sprintf("GARDEN_IPTABLES_NAT_INSTANCE_PREFIX=%s", s.config.InstanceChainPrefix),
-		fmt.Sprintf("GARDEN_NETWORK_INTERFACE_PREFIX=%s", s.nicPrefix),
-		fmt.Sprintf("GARDEN_IPTABLES_ALLOW_HOST_ACCESS=%t", s.allowHostAccess),
-	}
-	if err := s.runner.Run("setup-global-chains", cmd); err != nil {
-		return fmt.Errorf("setting up global chains: %s", err)
+		cmd := exec.Command("bash", "-c", SetupScript)
+		cmd.Env = []string{
+			fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
+			"ACTION=setup",
+			fmt.Sprintf("GARDEN_IPTABLES_BIN=%s", s.iptablesBin),
+			fmt.Sprintf("GARDEN_IPTABLES_FILTER_INPUT_CHAIN=%s", s.config.InputChain),
+			fmt.Sprintf("GARDEN_IPTABLES_FILTER_FORWARD_CHAIN=%s", s.config.ForwardChain),
+			fmt.Sprintf("GARDEN_IPTABLES_FILTER_DEFAULT_CHAIN=%s", s.config.DefaultChain),
+			fmt.Sprintf("GARDEN_IPTABLES_FILTER_INSTANCE_PREFIX=%s", s.config.InstanceChainPrefix),
+			fmt.Sprintf("GARDEN_IPTABLES_NAT_PREROUTING_CHAIN=%s", s.config.PreroutingChain),
+			fmt.Sprintf("GARDEN_IPTABLES_NAT_POSTROUTING_CHAIN=%s", s.config.PostroutingChain),
+			fmt.Sprintf("GARDEN_IPTABLES_NAT_INSTANCE_PREFIX=%s", s.config.InstanceChainPrefix),
+			fmt.Sprintf("GARDEN_NETWORK_INTERFACE_PREFIX=%s", s.nicPrefix),
+			fmt.Sprintf("GARDEN_IPTABLES_ALLOW_HOST_ACCESS=%t", s.allowHostAccess),
+		}
+
+		if err := s.runner.Run("setup-global-chains", cmd); err != nil {
+			return fmt.Errorf("setting up global chains: %s", err)
+		}
 	}
 
 	if err := s.resetDenyNetworks(); err != nil {

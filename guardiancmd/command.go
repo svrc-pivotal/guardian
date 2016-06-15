@@ -388,11 +388,15 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 		networkHookers = append(networkHookers, netplugin.New(cmd.Network.Plugin.Path(), cmd.Network.PluginExtraArgs...))
 	}
 
-	iptRunner := &logging.Runner{CommandRunner: linux_command_runner.New(), Logger: log.Session("iptables-runner")}
-	ipTablesDriver := driver.New("/sbin/iptables", iptRunner, chainPrefix)
+	runner := linux_command_runner.New()
+	iptRunner := &iptables.IPTablesLoggingRunner{Runner: runner}
+	ipTablesDriver := driver.New("iptables", runner, chainPrefix)
 	ipTablesConfig := iptables.NewConfig(chainPrefix)
-	ipTablesStarter := iptables.NewStarter("/sbin/iptables", ipTablesConfig, ipTablesDriver, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
-	instanceChainCreator := iptables.NewInstanceChainCreator("/sbin/iptables", ipTablesConfig, ipTablesDriver, iptRunner)
+
+	fmt.Printf("chain name %s\n", ipTablesConfig.InputChain)
+
+	ipTablesStarter := iptables.NewStarter("iptables", ipTablesConfig, ipTablesDriver, iptRunner, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
+	instanceChainCreator := iptables.NewInstanceChainCreator("iptables", ipTablesConfig, ipTablesDriver, iptRunner)
 
 	idGenerator := kawasaki.NewSequentialIDGenerator(time.Now().UnixNano())
 
@@ -402,10 +406,10 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 		subnets.NewPool(cmd.Network.Pool.CIDR()),
 		kawasaki.NewConfigCreator(idGenerator, interfacePrefix, chainPrefix, externalIP, dnsServers, cmd.Network.Mtu),
 		propManager,
-		factory.NewDefaultConfigurer(instanceChainCreator),
+		factory.NewDefaultConfigurer(*instanceChainCreator),
 		portPool,
-		iptables.NewPortForwarder(ipTables),
-		iptables.NewFirewallOpener(ipTables),
+		iptables.NewPortForwarder(ipTablesConfig, ipTablesDriver),
+		iptables.NewFirewallOpener(ipTablesConfig, ipTablesDriver),
 	)
 
 	networker := &kawasaki.CompositeNetworker{

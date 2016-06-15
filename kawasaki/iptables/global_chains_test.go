@@ -81,6 +81,12 @@ var _ = Describe("Start", func() {
 
 			Expect(fakeIPTablesRunner.RunCallCount()).To(Equal(0))
 		})
+
+		It("should reset the deny networks", func() {
+			Expect(starter.Start()).To(Succeed())
+
+			Expect(fakeIPTablesDriver.ResetChainCallCount()).To(Equal(1))
+		})
 	})
 
 	Context("when run errors", func() {
