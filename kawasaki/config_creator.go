@@ -23,6 +23,7 @@ type IDGenerator interface {
 type NetworkConfig struct {
 	HostIntf        string
 	ContainerIntf   string
+	IPTablesBinPath string
 	IPTablePrefix   string
 	IPTableInstance string
 	BridgeName      string
@@ -36,6 +37,7 @@ type NetworkConfig struct {
 
 type Creator struct {
 	idGenerator     IDGenerator
+	iptablesBin     string
 	interfacePrefix string
 	chainPrefix     string
 	externalIP      net.IP
@@ -43,7 +45,7 @@ type Creator struct {
 	mtu             int
 }
 
-func NewConfigCreator(idGenerator IDGenerator, interfacePrefix, chainPrefix string, externalIP net.IP, dnsServers []net.IP, mtu int) *Creator {
+func NewConfigCreator(idGenerator IDGenerator, interfacePrefix, iptablesBin, chainPrefix string, externalIP net.IP, dnsServers []net.IP, mtu int) *Creator {
 	if len(interfacePrefix) > maxInterfacePrefixLen {
 		panic("interface prefix is too long")
 	}
@@ -54,6 +56,7 @@ func NewConfigCreator(idGenerator IDGenerator, interfacePrefix, chainPrefix stri
 
 	return &Creator{
 		idGenerator:     idGenerator,
+		iptablesBin:     iptablesBin,
 		interfacePrefix: interfacePrefix,
 		chainPrefix:     chainPrefix,
 		externalIP:      externalIP,
@@ -70,6 +73,7 @@ func (c *Creator) Create(log lager.Logger, handle string, subnet *net.IPNet, ip 
 
 		BridgeName: fmt.Sprintf("%s%s%s", c.interfacePrefix, "brdg-", hex.EncodeToString(subnet.IP)),
 
+		IPTablesBinPath: c.iptablesBin,
 		IPTablePrefix:   c.chainPrefix,
 		IPTableInstance: id,
 		ContainerIP:     ip,

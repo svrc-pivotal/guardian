@@ -159,7 +159,7 @@ type GuardianCommand struct {
 		Kawasaki FileFlag `long:"kawasaki-bin" required:"true" description:"Path to the 'kawasaki' network hook binary."`
 		Init     FileFlag `long:"init-bin"     required:"true" description:"Path execute as pid 1 inside each container."`
 		Runc     string   `long:"runc-bin"     default:"runc" description:"Path to the 'runc' binary."`
-		IPTables FileFlag `long:"iptables-bin" default:"" description:"Path to the 'iptables' binary."`
+		IPTables FileFlag `long:"iptables-bin" default:"/sbin/iptables" description:"Path to the 'iptables' binary."`
 	} `group:"Binary Tools"`
 
 	Graph struct {
@@ -257,7 +257,7 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 		return fmt.Errorf("invalid pool range: %s", err)
 	}
 
-	networker, iptablesStarter, err := cmd.wireNetworker(logger, propManager, portPool)
+	networker, iptablesStarter, err := cmd.wireNetworker(logger, propManager, portPool, cmd.Bin.IPTables.Path())
 	if err != nil {
 		logger.Error("failed-to-wire-networker", err)
 		return err
@@ -364,7 +364,7 @@ func (cmd *GuardianCommand) wireRunDMCStarter(logger lager.Logger) gardener.Star
 	return rundmc.NewStarter(logger, mustOpen("/proc/cgroups"), mustOpen("/proc/self/cgroup"), cgroupsMountpoint, linux_command_runner.New())
 }
 
-func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki.ConfigStore, portPool *ports.PortPool) (gardener.Networker, gardener.Starter, error) {
+func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki.ConfigStore, portPool *ports.PortPool, iptablesPath string) (gardener.Networker, gardener.Starter, error) {
 	interfacePrefix := fmt.Sprintf("w%s", cmd.Server.Tag)
 	chainPrefix := fmt.Sprintf("w-%s-", cmd.Server.Tag)
 
@@ -390,13 +390,10 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 
 	runner := linux_command_runner.New()
 	iptRunner := &iptables.IPTablesLoggingRunner{Runner: runner}
-	ipTablesDriver := driver.New("iptables", runner, chainPrefix)
+	ipTablesDriver := driver.New(iptablesPath, runner, chainPrefix)
 	ipTablesConfig := iptables.NewConfig(chainPrefix)
-
-	fmt.Printf("chain name %s\n", ipTablesConfig.InputChain)
-
-	ipTablesStarter := iptables.NewStarter("iptables", ipTablesConfig, ipTablesDriver, iptRunner, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
-	instanceChainCreator := iptables.NewInstanceChainCreator("iptables", ipTablesConfig, ipTablesDriver, iptRunner)
+	ipTablesStarter := iptables.NewStarter(iptablesPath, ipTablesConfig, ipTablesDriver, iptRunner, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
+	instanceChainCreator := iptables.NewInstanceChainCreator(iptablesPath, ipTablesConfig, ipTablesDriver, iptRunner)
 
 	idGenerator := kawasaki.NewSequentialIDGenerator(time.Now().UnixNano())
 
@@ -404,7 +401,7 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 		cmd.Bin.Kawasaki.Path(),
 		kawasaki.SpecParserFunc(kawasaki.ParseSpec),
 		subnets.NewPool(cmd.Network.Pool.CIDR()),
-		kawasaki.NewConfigCreator(idGenerator, interfacePrefix, chainPrefix, externalIP, dnsServers, cmd.Network.Mtu),
+		kawasaki.NewConfigCreator(idGenerator, interfacePrefix, iptablesPath, chainPrefix, externalIP, dnsServers, cmd.Network.Mtu),
 		propManager,
 		factory.NewDefaultConfigurer(*instanceChainCreator),
 		portPool,

@@ -47,7 +47,7 @@ var _ = Describe("Flags", func() {
 
 		Context("when the path is valid but it's not iptables", func() {
 			BeforeEach(func() {
-				args = append(args, "--iptables-bin", "/bin/echo")
+				args = append(args, "--iptables-bin", "/bin/ls")
 			})
 
 			It("should fail to start the server", func() {
