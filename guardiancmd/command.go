@@ -25,6 +25,7 @@ import (
 	"github.com/cloudfoundry-incubator/guardian/kawasaki"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/factory"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
+	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/driver"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/ports"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/subnets"
 	"github.com/cloudfoundry-incubator/guardian/logging"
@@ -388,8 +389,10 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 	}
 
 	iptRunner := &logging.Runner{CommandRunner: linux_command_runner.New(), Logger: log.Session("iptables-runner")}
-	ipTables := iptables.New(iptRunner, chainPrefix)
-	ipTablesStarter := iptables.NewStarter(ipTables, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
+	ipTablesDriver := driver.New("/sbin/iptables", iptRunner, chainPrefix)
+	ipTablesConfig := iptables.NewConfig(chainPrefix)
+	ipTablesStarter := iptables.NewStarter("/sbin/iptables", ipTablesConfig, ipTablesDriver, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
+	instanceChainCreator := iptables.NewInstanceChainCreator("/sbin/iptables", ipTablesConfig, ipTablesDriver, iptRunner)
 
 	idGenerator := kawasaki.NewSequentialIDGenerator(time.Now().UnixNano())
 
@@ -399,7 +402,7 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 		subnets.NewPool(cmd.Network.Pool.CIDR()),
 		kawasaki.NewConfigCreator(idGenerator, interfacePrefix, chainPrefix, externalIP, dnsServers, cmd.Network.Mtu),
 		propManager,
-		factory.NewDefaultConfigurer(iptables.New(linux_command_runner.New(), chainPrefix)),
+		factory.NewDefaultConfigurer(instanceChainCreator),
 		portPool,
 		iptables.NewPortForwarder(ipTables),
 		iptables.NewFirewallOpener(ipTables),

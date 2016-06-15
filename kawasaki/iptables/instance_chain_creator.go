@@ -24,7 +24,7 @@ func NewInstanceChainCreator(iptablesBin string, config IPTablesConfig, driver I
 	}
 }
 
-func (cc *InstanceChainCreator) Create(logger lager.Logger, instanceId, bridgeName string, ip net.IP, network *net.IPNet) error {
+func (cc InstanceChainCreator) Create(logger lager.Logger, instanceId, bridgeName string, ip net.IP, network *net.IPNet) error {
 	instanceChain := InstanceChain(cc.config, instanceId)
 
 	if err := cc.driver.CreateChain("nat", instanceChain); err != nil {
@@ -75,7 +75,7 @@ func (cc *InstanceChainCreator) Create(logger lager.Logger, instanceId, bridgeNa
 	return cc.createLoggingChain(logger, instanceId)
 }
 
-func (cc *InstanceChainCreator) createLoggingChain(logger lager.Logger, instanceId string) error {
+func (cc InstanceChainCreator) createLoggingChain(logger lager.Logger, instanceId string) error {
 	instanceChain := InstanceChain(cc.config, instanceId)
 	loggingChain := fmt.Sprintf("%s-log", instanceChain)
 
@@ -96,7 +96,7 @@ func (cc *InstanceChainCreator) createLoggingChain(logger lager.Logger, instance
 	return nil
 }
 
-func (cc *InstanceChainCreator) Destroy(logger lager.Logger, instanceId string) error {
+func (cc InstanceChainCreator) Destroy(logger lager.Logger, instanceId string) error {
 	instanceChain := InstanceChain(cc.config, instanceId)
 
 	cc.driver.FlushChain("nat", instanceChain)

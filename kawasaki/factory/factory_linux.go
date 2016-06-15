@@ -8,7 +8,7 @@ import (
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/netns"
 )
 
-func NewDefaultConfigurer(ipt *iptables.IPTablesController) kawasaki.Configurer {
+func NewDefaultConfigurer(instanceChainCreator iptables.InstanceChainCreator) kawasaki.Configurer {
 	hostConfigurer := &configure.Host{
 		Veth:   &devices.VethCreator{},
 		Link:   &devices.Link{},
@@ -22,7 +22,7 @@ func NewDefaultConfigurer(ipt *iptables.IPTablesController) kawasaki.Configurer 
 	return kawasaki.NewConfigurer(
 		hostConfigurer,
 		containerCfgApplier,
-		iptables.NewInstanceChainCreator(ipt),
+		instanceChainCreator,
 		&netns.Execer{},
 	)
 }
