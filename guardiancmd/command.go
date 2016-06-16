@@ -389,7 +389,11 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 	}
 
 	runner := linux_command_runner.New()
-	iptRunner := &iptables.IPTablesLoggingRunner{Runner: runner}
+	loggingRunner := logging.Runner{
+		CommandRunner: runner,
+		Logger:        log.Session("iptables-runner"),
+	}
+	iptRunner := &iptables.IPTablesLoggingRunner{Runner: loggingRunner}
 	ipTablesDriver := driver.New(iptablesPath, runner, chainPrefix)
 	ipTablesConfig := iptables.NewConfig(chainPrefix)
 	ipTablesStarter := iptables.NewStarter(iptablesPath, ipTablesConfig, ipTablesDriver, iptRunner, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/cloudfoundry/gunk/command_runner"
+	"github.com/cloudfoundry-incubator/guardian/logging"
 )
 
 type IPTablesLoggingRunner struct {
-	Runner command_runner.CommandRunner
+	Runner logging.Runner
 }
 
 func (r *IPTablesLoggingRunner) Run(action string, cmd *exec.Cmd) error {

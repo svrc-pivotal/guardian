@@ -15,6 +15,7 @@ import (
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/factory"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/driver"
+	"github.com/cloudfoundry-incubator/guardian/logging"
 	"github.com/cloudfoundry-incubator/guardian/pkg/vars"
 	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	"github.com/docker/docker/pkg/reexec"
@@ -84,7 +85,11 @@ func main() {
 	logger.Info("start")
 
 	runner := linux_command_runner.New()
-	iptRunner := &iptables.IPTablesLoggingRunner{Runner: runner}
+	loggingRunner := logging.Runner{
+		CommandRunner: runner,
+		Logger:        logger.Session("iptables-runner"),
+	}
+	iptRunner := &iptables.IPTablesLoggingRunner{Runner: loggingRunner}
 	ipTablesDriver := driver.New(config.IPTablesBinPath, runner, config.IPTablePrefix)
 	ipTablesConfig := iptables.NewConfig(config.IPTablePrefix)
 	instanceChainCreator := iptables.NewInstanceChainCreator(config.IPTablesBinPath, ipTablesConfig, ipTablesDriver, iptRunner)
