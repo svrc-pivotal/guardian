@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables/iptablesfakes"
+	"github.com/cloudfoundry-incubator/guardian/logging"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	"github.com/pivotal-golang/lager"
 	"github.com/pivotal-golang/lager/lagertest"
@@ -46,7 +47,12 @@ var _ = Describe("Create", func() {
 			"my-iptables",
 			iptablesConfig,
 			fakeIPTablesDriver,
-			&iptables.IPTablesLoggingRunner{Runner: fakeRunner},
+			&iptables.IPTablesLoggingRunner{
+				Runner: logging.Runner{
+					CommandRunner: fakeRunner,
+					Logger:        lagertest.NewTestLogger("iptables-runner"),
+				},
+			},
 		)
 	})
 

@@ -5,8 +5,10 @@ import (
 	"os/exec"
 
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
+	"github.com/cloudfoundry-incubator/guardian/logging"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	. "github.com/cloudfoundry/gunk/command_runner/fake_command_runner/matchers"
+	"github.com/pivotal-golang/lager/lagertest"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -21,7 +23,10 @@ var _ = Describe("Runner", func() {
 	BeforeEach(func() {
 		fakeRunner = fake_command_runner.New()
 		runner = &iptables.IPTablesLoggingRunner{
-			Runner: fakeRunner,
+			Runner: logging.Runner{
+				CommandRunner: fakeRunner,
+				Logger:        lagertest.NewTestLogger("iptables-runner"),
+			},
 		}
 	})
 

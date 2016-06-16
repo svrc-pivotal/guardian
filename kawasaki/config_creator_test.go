@@ -39,18 +39,18 @@ var _ = Describe("ConfigCreator", func() {
 
 		mtu = 1234
 
-		creator = kawasaki.NewConfigCreator(idGenerator, "w1", "0123456789abcdef", externalIP, dnsServers, mtu)
+		creator = kawasaki.NewConfigCreator(idGenerator, "w1", "myptables", "0123456789abcdef", externalIP, dnsServers, mtu)
 	})
 
 	It("panics if the interface prefix is longer than 2 characters", func() {
 		Expect(func() {
-			kawasaki.NewConfigCreator(idGenerator, "too-long", "wc", externalIP, dnsServers, mtu)
+			kawasaki.NewConfigCreator(idGenerator, "too-long", "myptables", "wc", externalIP, dnsServers, mtu)
 		}).To(Panic())
 	})
 
 	It("panics if the chain prefix is longer than 16 characters", func() {
 		Expect(func() {
-			kawasaki.NewConfigCreator(idGenerator, "w1", "0123456789abcdefg", externalIP, dnsServers, mtu)
+			kawasaki.NewConfigCreator(idGenerator, "w1", "myptables", "0123456789abcdefg", externalIP, dnsServers, mtu)
 		}).To(Panic())
 	})
 

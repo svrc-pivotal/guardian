@@ -72,20 +72,6 @@ var _ = Describe("garden server Logging", func() {
 		client = startGarden(args...)
 	})
 
-	Context("when the log-level is passed as debug", func() {
-		BeforeEach(func() {
-			args = []string{"--log-level", "debug"}
-		})
-
-		AfterEach(func() {
-			Expect(client.Stop()).To(Succeed())
-		})
-
-		It("logs at debug level", func() {
-			Eventually(client, "1s").Should(gbytes.Say(`"log_level":0`))
-		})
-	})
-
 	Context("when log-level is not passed", func() {
 		AfterEach(func() {
 			Expect(client.Stop()).To(Succeed())
