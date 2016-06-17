@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/cloudfoundry/gunk/command_runner"
@@ -32,18 +33,19 @@ type IPTables interface {
 }
 
 type IPTablesController struct {
-	runner                                                                                         command_runner.CommandRunner
-	preroutingChain, postroutingChain, inputChain, forwardChain, defaultChain, instanceChainPrefix string
+	runner                                                                                                  command_runner.CommandRunner
+	BinPath, preroutingChain, postroutingChain, inputChain, forwardChain, defaultChain, instanceChainPrefix string
 }
 
 type Chains struct {
 	Prerouting, Postrouting, Input, Forward, Default string
 }
 
-func New(runner command_runner.CommandRunner, chainPrefix string) *IPTablesController {
+func New(BinPath string, runner command_runner.CommandRunner, chainPrefix string) *IPTablesController {
 	return &IPTablesController{
 		runner: runner,
 
+		BinPath:             BinPath,
 		preroutingChain:     chainPrefix + "prerouting",
 		postroutingChain:    chainPrefix + "postrouting",
 		inputChain:          chainPrefix + "input",
@@ -54,35 +56,41 @@ func New(runner command_runner.CommandRunner, chainPrefix string) *IPTablesContr
 }
 
 func (iptables *IPTablesController) CreateChain(table, chain string) error {
-	return iptables.run("create-instance-chains", exec.Command("/sbin/iptables", "--wait", "--table", table, "-N", chain))
+	shellCmd := fmt.Sprintf(
+		`%s --wait --table %s -N %s`,
+		iptables.BinPath, table, chain,
+	)
+	return iptables.run("create-instance-chains", exec.Command("sh", "-c", shellCmd))
 }
 
 func (iptables *IPTablesController) DeleteChain(table, chain string) error {
 	shellCmd := fmt.Sprintf(
-		`iptables --wait --table %s -X %s 2> /dev/null || true`,
-		table, chain,
+		`%s --wait --table %s -X %s 2> /dev/null || true`,
+		iptables.BinPath, table, chain,
 	)
 	return iptables.run("delete-instance-chains", exec.Command("sh", "-c", shellCmd))
 }
 
 func (iptables *IPTablesController) FlushChain(table, chain string) error {
 	shellCmd := fmt.Sprintf(
-		`iptables --wait --table %s -F %s 2> /dev/null || true`,
-		table, chain,
+		`%s --wait --table %s -F %s 2> /dev/null || true`,
+		iptables.BinPath, table, chain,
 	)
 	return iptables.run("flush-instance-chains", exec.Command("sh", "-c", shellCmd))
 }
 
 func (iptables *IPTablesController) DeleteChainReferences(table, targetChain, referencedChain string) error {
 	shellCmd := fmt.Sprintf(
-		`set -e; /sbin/iptables --wait --table %s -S %s | grep "%s" | sed -e "s/-A/-D/" | xargs --no-run-if-empty --max-lines=1 iptables -w -t %s`,
-		table, targetChain, referencedChain, table,
+		`set -e; %s --wait --table %s -S %s | grep "%s" | sed -e "s/-A/-D/" | xargs --no-run-if-empty --max-lines=1 %s -w -t %s`,
+		iptables.BinPath, table, targetChain, referencedChain, iptables.BinPath, table,
 	)
 	return iptables.run("delete-referenced-chains", exec.Command("sh", "-c", shellCmd))
 }
 
 func (iptables *IPTablesController) PrependRule(chain string, rule Rule) error {
-	return iptables.run("prepend", exec.Command("/sbin/iptables", append([]string{"-w", "-I", chain, "1"}, rule.Flags(chain)...)...))
+	shellCmd := []string{iptables.BinPath, "--wait", "-I", chain, "1"}
+	shellCmd = append(shellCmd, rule.Flags(chain)...)
+	return iptables.run("prepend", exec.Command("sh", "-c", strings.Join(shellCmd, " ")))
 }
 
 func (iptables *IPTablesController) InstanceChain(instanceId string) string {
@@ -94,12 +102,14 @@ func (iptables *IPTablesController) run(action string, cmd *exec.Cmd) error {
 	cmd.Stderr = &buff
 
 	if err := iptables.runner.Run(cmd); err != nil {
-		return fmt.Errorf("iptables %s: %s", action, buff.String())
+		return fmt.Errorf("%s %s: %s", iptables.BinPath, action, buff.String())
 	}
 
 	return nil
 }
 
 func (iptables *IPTablesController) appendRule(chain string, rule Rule) error {
-	return iptables.run("append", exec.Command("/sbin/iptables", append([]string{"-w", "-A", chain}, rule.Flags(chain)...)...))
+	shellCmd := []string{iptables.BinPath, "--wait", "-A", chain}
+	shellCmd = append(shellCmd, rule.Flags(chain)...)
+	return iptables.run("append", exec.Command("sh", "-c", strings.Join(shellCmd, " ")))
 }

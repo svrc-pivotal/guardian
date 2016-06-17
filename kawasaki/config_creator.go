@@ -26,6 +26,7 @@ type NetworkConfig struct {
 	ContainerIntf   string
 	IPTablePrefix   string
 	IPTableInstance string
+	IPTablesBinPath string
 	BridgeName      string
 	BridgeIP        net.IP
 	ContainerIP     net.IP

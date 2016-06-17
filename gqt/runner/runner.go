@@ -193,6 +193,7 @@ func cmd(tmpdir, depotDir, graphPath, network, addr, bin, initBin, kawasakiBin, 
 	gardenArgs = appendDefaultFlag(gardenArgs, "--iodaemon-bin", iodaemonBin)
 	gardenArgs = appendDefaultFlag(gardenArgs, "--dadoo-bin", dadooBin)
 	gardenArgs = appendDefaultFlag(gardenArgs, "--kawasaki-bin", kawasakiBin)
+	// gardenArgs = appendDefaultFlag(gardenArgs, "--iptables-bin", "/sbin/iptables")
 	gardenArgs = appendDefaultFlag(gardenArgs, "--nstar-bin", nstarBin)
 	gardenArgs = appendDefaultFlag(gardenArgs, "--tar-bin", tarBin)
 	gardenArgs = appendDefaultFlag(gardenArgs, "--debug-bind-ip", "0.0.0.0")

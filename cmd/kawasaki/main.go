@@ -60,6 +60,7 @@ func main() {
 	flag.StringVar(&config.HostIntf, "host-interface", "", "the host interface to create")
 	flag.StringVar(&config.ContainerIntf, "container-interface", "", "the container interface to create")
 	flag.StringVar(&config.BridgeName, "bridge-interface", "", "the bridge interface to create or use")
+	flag.StringVar(&config.IPTablesBinPath, "iptables-bin", "", "path to the the iptables binary")
 	flag.StringVar(&config.IPTablePrefix, "iptable-prefix", "", "the iptable chain prefix")
 	flag.StringVar(&config.IPTableInstance, "iptable-instance", "", "the iptable instance to add rules to")
 	flag.IntVar(&config.Mtu, "mtu", 1500, "the mtu")
@@ -82,7 +83,7 @@ func main() {
 
 	logger.Info("start")
 
-	configurer := factory.NewDefaultConfigurer(iptables.New(linux_command_runner.New(), config.IPTablePrefix))
+	configurer := factory.NewDefaultConfigurer(iptables.New(config.IPTablesBinPath, linux_command_runner.New(), config.IPTablePrefix))
 	dnsResolvConfigurer := wireDNSResolvConfigurer(state, config)
 	hookActioner := &kawasaki.HookActioner{
 		Configurer:          configurer,

@@ -185,6 +185,7 @@ func (n *networker) Hooks(log lager.Logger, containerSpec garden.ContainerSpec) 
 		fmt.Sprintf("--external-ip=%s", config.ExternalIP),
 		fmt.Sprintf("--subnet=%s", config.Subnet.String()),
 		fmt.Sprintf("--mtu=%d", config.Mtu),
+		fmt.Sprintf("--iptables-bin=%s", config.IPTablesBinPath),
 		fmt.Sprintf("--iptable-prefix=%s", config.IPTablePrefix),
 		fmt.Sprintf("--iptable-instance=%s", config.IPTableInstance),
 	}

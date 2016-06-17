@@ -17,15 +17,16 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Create", func() {
+var _ = FDescribe("Create", func() {
 	var (
-		fakeRunner *fake_command_runner.FakeCommandRunner
-		creator    *iptables.InstanceChainCreator
-		bridgeName string
-		ip         net.IP
-		network    *net.IPNet
-		logger     lager.Logger
-		handle     string
+		fakeRunner         *fake_command_runner.FakeCommandRunner
+		creator            *iptables.InstanceChainCreator
+		bridgeName         string
+		ip                 net.IP
+		network            *net.IPNet
+		logger             lager.Logger
+		handle             string
+		iptablesController *iptables.IPTablesController
 	)
 
 	BeforeEach(func() {
@@ -39,9 +40,8 @@ var _ = Describe("Create", func() {
 		ip, network, err = net.ParseCIDR("1.2.3.4/28")
 		Expect(err).NotTo(HaveOccurred())
 
-		creator = iptables.NewInstanceChainCreator(
-			iptables.New(fakeRunner, "prefix-"),
-		)
+		iptablesController = iptables.New("iptables", fakeRunner, "prefix-")
+		creator = iptables.NewInstanceChainCreator(iptablesController)
 	})
 
 	Describe("Container Creation", func() {
@@ -50,53 +50,48 @@ var _ = Describe("Create", func() {
 		BeforeEach(func() {
 			specs = []fake_command_runner.CommandSpec{
 				{
-					Path: "/sbin/iptables",
-					Args: []string{"--wait", "--table", "nat", "-N", "prefix-instance-some-id"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait --table nat -N prefix-instance-some-id", iptablesController.BinPath)},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "--table", "nat", "-A", "prefix-prerouting",
-						"--jump", "prefix-instance-some-id"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait --table nat -A prefix-prerouting --jump prefix-instance-some-id", iptablesController.BinPath)},
 				},
 				{
 					Path: "sh",
 					Args: []string{"-c", fmt.Sprintf(
-						`(iptables --wait --table nat -S %s | grep "\-j MASQUERADE\b" | grep -q -F -- "-s %s") || iptables --wait --table nat -A %s --source %s ! --destination %s --jump MASQUERADE`,
-						"prefix-postrouting", network.String(), "prefix-postrouting",
-						network.String(), network.String(),
+						`(%s --wait --table nat -S %s | grep "\-j MASQUERADE\b" | grep -q -F -- "-s %s") || %s --wait --table nat -A %s --source %s ! --destination %s --jump MASQUERADE`,
+						iptablesController.BinPath, "prefix-postrouting", network.String(), iptablesController.BinPath,
+						"prefix-postrouting", network.String(), network.String(),
 					)},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "--table", "filter", "-N", "prefix-instance-some-id"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait --table filter -N prefix-instance-some-id", iptablesController.BinPath)},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "-A", "prefix-instance-some-id",
-						"-s", network.String(), "-d", network.String(), "-j", "ACCEPT"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait -A prefix-instance-some-id -s %s -d %s -j ACCEPT", iptablesController.BinPath, network.String(), network.String())},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "-A", "prefix-instance-some-id",
-						"--goto", "prefix-default"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait -A prefix-instance-some-id --goto prefix-default", iptablesController.BinPath)},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "-I", "prefix-forward", "2", "--in-interface", bridgeName,
-						"--source", ip.String(), "--goto", "prefix-instance-some-id"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait -I prefix-forward 2 --in-interface %s --source %s --goto prefix-instance-some-id", iptablesController.BinPath, bridgeName, ip.String())},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "--table", "filter", "-N", "prefix-instance-some-id-log"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait --table filter -N prefix-instance-some-id-log", iptablesController.BinPath)},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "-A", "prefix-instance-some-id-log", "-m", "conntrack", "--ctstate", "NEW,UNTRACKED,INVALID",
-						"--protocol", "tcp", "--jump", "LOG", "--log-prefix", "some-handle-that-is-longer-th"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait -A prefix-instance-some-id-log -m conntrack --ctstate NEW,UNTRACKED,INVALID --protocol tcp --jump LOG --log-prefix some-handle-that-is-longer-th", iptablesController.BinPath)},
 				},
 				{
-					Path: "iptables",
-					Args: []string{"--wait", "-A", "prefix-instance-some-id-log", "--jump", "RETURN"},
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf("%s --wait -A prefix-instance-some-id-log --jump RETURN", iptablesController.BinPath)},
 				},
 			}
 		})

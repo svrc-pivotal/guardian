@@ -26,15 +26,15 @@ func (cc *InstanceChainCreator) Create(logger lager.Logger, handle, instanceId, 
 	}
 
 	// Bind nat instance chain to nat prerouting chain
-	cmd := exec.Command("iptables", "--wait", "--table", "nat", "-A", cc.iptables.preroutingChain, "--jump", instanceChain)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("%s --wait --table nat -A %s --jump %s", cc.iptables.BinPath, cc.iptables.preroutingChain, instanceChain))
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
 
 	// Enable NAT for traffic coming from containers
 	cmd = exec.Command("sh", "-c", fmt.Sprintf(
-		`(iptables --wait --table nat -S %s | grep "\-j MASQUERADE\b" | grep -q -F -- "-s %s") || iptables --wait --table nat -A %s --source %s ! --destination %s --jump MASQUERADE`,
-		cc.iptables.postroutingChain, network.String(), cc.iptables.postroutingChain,
+		`(%s --wait --table nat -S %s | grep "\-j MASQUERADE\b" | grep -q -F -- "-s %s") || %s --wait --table nat -A %s --source %s ! --destination %s --jump MASQUERADE`,
+		cc.iptables.BinPath, cc.iptables.postroutingChain, network.String(), cc.iptables.BinPath, cc.iptables.postroutingChain,
 		network.String(), network.String(),
 	))
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
@@ -47,19 +47,19 @@ func (cc *InstanceChainCreator) Create(logger lager.Logger, handle, instanceId, 
 	}
 
 	// Allow intra-subnet traffic (Linux ethernet bridging goes through ip stack)
-	cmd = exec.Command("iptables", "--wait", "-A", instanceChain, "-s", network.String(), "-d", network.String(), "-j", "ACCEPT")
+	cmd = exec.Command("sh", "-c", fmt.Sprintf("%s --wait -A %s -s %s -d %s -j ACCEPT", cc.iptables.BinPath, instanceChain, network.String(), network.String()))
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
 
 	// Otherwise, use the default filter chain
-	cmd = exec.Command("iptables", "--wait", "-A", instanceChain, "--goto", cc.iptables.defaultChain)
+	cmd = exec.Command("sh", "-c", fmt.Sprintf("%s --wait -A %s --goto %s", cc.iptables.BinPath, instanceChain, cc.iptables.defaultChain))
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
 
 	// Bind filter instance chain to filter forward chain
-	cmd = exec.Command("iptables", "--wait", "-I", cc.iptables.forwardChain, "2", "--in-interface", bridgeName, "--source", ip.String(), "--goto", instanceChain)
+	cmd = exec.Command("sh", "-c", fmt.Sprintf("%s --wait -I %s 2 --in-interface %s --source %s --goto %s", cc.iptables.BinPath, cc.iptables.forwardChain, bridgeName, ip.String(), instanceChain))
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
@@ -80,12 +80,12 @@ func (cc *InstanceChainCreator) createLoggingChain(logger lager.Logger, handle, 
 		handle = handle[0:29]
 	}
 
-	cmd := exec.Command("iptables", "--wait", "-A", loggingChain, "-m", "conntrack", "--ctstate", "NEW,UNTRACKED,INVALID", "--protocol", "tcp", "--jump", "LOG", "--log-prefix", handle)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("%s --wait -A %s -m conntrack --ctstate NEW,UNTRACKED,INVALID --protocol tcp --jump LOG --log-prefix %s", cc.iptables.BinPath, loggingChain, handle))
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
 
-	cmd = exec.Command("iptables", "--wait", "-A", loggingChain, "--jump", "RETURN")
+	cmd = exec.Command("sh", "-c", fmt.Sprintf("%s --wait -A %s --jump RETURN", cc.iptables.BinPath, loggingChain))
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
@@ -98,8 +98,8 @@ func (cc *InstanceChainCreator) Destroy(logger lager.Logger, instanceId string) 
 
 	// Prune nat prerouting chain
 	cmd := exec.Command("sh", "-c", fmt.Sprintf(
-		`iptables --wait --table nat -S %s 2> /dev/null | grep "\-j %s\b" | sed -e "s/-A/-D/" | xargs --no-run-if-empty --max-lines=1 iptables --wait --table nat`,
-		cc.iptables.preroutingChain, instanceChain,
+		`%s --wait --table nat -S %s 2> /dev/null | grep "\-j %s\b" | sed -e "s/-A/-D/" | xargs --no-run-if-empty --max-lines=1 %s --wait --table nat`,
+		cc.iptables.BinPath, cc.iptables.preroutingChain, instanceChain, cc.iptables.BinPath,
 	))
 	if err := cc.iptables.run("prune-prerouting-chain", cmd); err != nil {
 		return err
@@ -117,8 +117,8 @@ func (cc *InstanceChainCreator) Destroy(logger lager.Logger, instanceId string) 
 
 	// Prune forward chain
 	cmd = exec.Command("sh", "-c", fmt.Sprintf(
-		`iptables --wait -S %s 2> /dev/null | grep "\-g %s\b" | sed -e "s/-A/-D/" | xargs --no-run-if-empty --max-lines=1 iptables --wait`,
-		cc.iptables.forwardChain, instanceChain,
+		`%s --wait -S %s 2> /dev/null | grep "\-g %s\b" | sed -e "s/-A/-D/" | xargs --no-run-if-empty --max-lines=1 %s --wait`,
+		cc.iptables.BinPath, cc.iptables.forwardChain, instanceChain, cc.iptables.BinPath,
 	))
 	if err := cc.iptables.run("prune-forward-chain", cmd); err != nil {
 		return err
