@@ -149,8 +149,45 @@ func sendWindowSize(winszw io.Writer, winSize *garden.WindowSize) {
 	json.NewEncoder(winszw).Encode(initialSize)
 }
 
-func (d *ExecRunner) Attach(log lager.Logger, processID string, io garden.ProcessIO, processesPath string) (garden.Process, error) {
-	return d.iodaemonRunner.Attach(log, processID, io, processesPath)
+func (d *ExecRunner) Attach(log lager.Logger, processID string, pio garden.ProcessIO, processesPath string) (garden.Process, error) {
+	if err := os.MkdirAll(processesPath, 0700); err != nil {
+		return nil, err
+	}
+
+	// pipes, err := mkFifos(io, filepath.Join(processesPath, "stdin"), filepath.Join(processesPath, "stdout"), filepath.Join(processesPath, "stderr"))
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// if err := pipes.start(); err != nil {
+	// 	return nil, err
+	// }
+	pidPath := filepath.Join(processesPath, processID)
+	fmt.Printf("1PIDPATH: %s\n", pidPath)
+	si, err := os.Open(filepath.Join(pidPath, "stdin"))
+	if err != nil {
+		return nil, err
+	}
+	go io.Copy(si, pio.Stdin)
+	fmt.Printf("2PIDPATH: %s\n", pidPath)
+
+	fmt.Printf("3PIDPATH: %s\n", pidPath)
+	so, err := os.Open(filepath.Join(pidPath, "stdout"))
+	if err != nil {
+		return nil, err
+	}
+	go io.Copy(pio.Stdout, so)
+	fmt.Printf("4PIDPATH: %s\n", pidPath)
+
+	fmt.Printf("5PIDPATH: %s\n", pidPath)
+	se, err := os.Open(filepath.Join(pidPath, "stderr"))
+	if err != nil {
+		return nil, err
+	}
+	go io.Copy(pio.Stderr, se)
+	fmt.Printf("6PIDPATH: %s\n", pidPath)
+
+	return &process{}, nil
 }
 
 type osSignal garden.Signal

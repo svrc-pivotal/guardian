@@ -17,7 +17,7 @@ import (
 	"github.com/onsi/gomega/gbytes"
 )
 
-var _ = Describe("Surviving Restarts", func() {
+var _ = FDescribe("Surviving Restarts", func() {
 	var (
 		args   []string
 		client *runner.RunningGarden
@@ -48,6 +48,7 @@ var _ = Describe("Surviving Restarts", func() {
 			existingProc  garden.Process
 			containerSpec garden.ContainerSpec
 			restartArgs   []string
+			processSpec   garden.ProcessSpec
 		)
 
 		BeforeEach(func() {
@@ -61,6 +62,11 @@ var _ = Describe("Surviving Restarts", func() {
 			}
 
 			restartArgs = []string{}
+			processSpec = garden.ProcessSpec{
+				Env:  []string{"USE_DADOO=true"},
+				Path: "/bin/sh",
+				Args: []string{"-c", "while true; do echo hello; sleep 1; done;"},
+			}
 		})
 
 		JustBeforeEach(func() {
@@ -83,10 +89,7 @@ var _ = Describe("Surviving Restarts", func() {
 
 			out := gbytes.NewBuffer()
 			existingProc, err = container.Run(
-				garden.ProcessSpec{
-					Path: "/bin/sh",
-					Args: []string{"-c", "while true; do echo hello; sleep 1; done;"},
-				},
+				processSpec,
 				garden.ProcessIO{
 					Stdout: io.MultiWriter(GinkgoWriter, out),
 					Stderr: io.MultiWriter(GinkgoWriter, out),
@@ -175,7 +178,7 @@ var _ = Describe("Surviving Restarts", func() {
 					Expect(out).To(gbytes.Say("hello"))
 				})
 
-				It("can reattach to processes that are still running", func() {
+				FIt("can reattach to processes -without tty- that are still running", func() {
 					out := gbytes.NewBuffer()
 					procId := existingProc.ID()
 					process, err := container.Attach(procId, garden.ProcessIO{
@@ -194,6 +197,43 @@ var _ = Describe("Surviving Restarts", func() {
 					}()
 
 					Eventually(exited).Should(BeClosed())
+				})
+
+				Context("when running a long-running process with tty enabled", func() {
+					BeforeEach(func() {
+						processSpec = garden.ProcessSpec{
+							Env:  []string{"USE_DADOO=true"},
+							Path: "/bin/sh",
+							Args: []string{"-c", "while true; do echo hello; sleep 1; done;"},
+							TTY: &garden.TTYSpec{
+								WindowSize: &garden.WindowSize{
+									Columns: 1,
+									Rows:    1,
+								},
+							},
+						}
+					})
+
+					It("can reattach to the process and see the exit code", func() {
+						out := gbytes.NewBuffer()
+						procId := existingProc.ID()
+						process, err := container.Attach(procId, garden.ProcessIO{
+							Stdout: io.MultiWriter(GinkgoWriter, out),
+							Stderr: io.MultiWriter(GinkgoWriter, out),
+						})
+						Expect(err).NotTo(HaveOccurred())
+						Eventually(out).Should(gbytes.Say("hello"))
+
+						Expect(process.Signal(garden.SignalKill)).To(Succeed())
+
+						exited := make(chan struct{})
+						go func() {
+							process.Wait()
+							close(exited)
+						}()
+
+						Eventually(exited).Should(BeClosed())
+					})
 				})
 
 				It("can still destroy the container", func() {

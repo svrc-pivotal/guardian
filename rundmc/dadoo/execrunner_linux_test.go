@@ -30,124 +30,121 @@ import (
 )
 
 var _ = Describe("Dadoo ExecRunner", func() {
-	var (
-		fakeIodaemonRunner     *fakes.FakeExecRunner
-		fakeCommandRunner      *fake_command_runner.FakeCommandRunner
-		fakeProcessIDGenerator *fakes.FakeUidGenerator
-		fakePidGetter          *dadoofakes.FakePidGetter
-		runner                 *dadoo.ExecRunner
-		processPath            string
-		pidPath                string
-		receivedStdinContents  []byte
-		runcReturns            byte
-		dadooReturns           error
-		dadooWritesLogs        string
-		log                    *lagertest.TestLogger
-		receivedWinSize        dadoo.TtySize
-		readWindowSize         bool
-		readWindowSizeCh       chan struct{}
-	)
+	Describe("Run", func() {
+		var (
+			fakeIodaemonRunner     *fakes.FakeExecRunner
+			fakeCommandRunner      *fake_command_runner.FakeCommandRunner
+			fakeProcessIDGenerator *fakes.FakeUidGenerator
+			fakePidGetter          *dadoofakes.FakePidGetter
+			runner                 *dadoo.ExecRunner
+			processPath            string
+			receivedStdinContents  []byte
+			runcReturns            byte
+			dadooReturns           error
+			dadooWritesLogs        string
+			log                    *lagertest.TestLogger
+			receivedWinSize        dadoo.TtySize
+			readWindowSize         bool
+			readWindowSizeCh       chan struct{}
+		)
 
-	BeforeEach(func() {
-		readWindowSize = false
-		readWindowSizeCh = make(chan struct{})
+		BeforeEach(func() {
+			readWindowSize = false
+			readWindowSizeCh = make(chan struct{})
 
-		fakeIodaemonRunner = new(fakes.FakeExecRunner)
-		fakeCommandRunner = fake_command_runner.New()
-		fakeProcessIDGenerator = new(fakes.FakeUidGenerator)
-		fakePidGetter = new(dadoofakes.FakePidGetter)
+			fakeIodaemonRunner = new(fakes.FakeExecRunner)
+			fakeCommandRunner = fake_command_runner.New()
+			fakeProcessIDGenerator = new(fakes.FakeUidGenerator)
+			fakePidGetter = new(dadoofakes.FakePidGetter)
 
-		fakeProcessIDGenerator.GenerateReturns("the-pid")
-		fakePidGetter.PidReturns(0, nil)
+			fakeProcessIDGenerator.GenerateReturns("the-pid")
+			fakePidGetter.PidReturns(0, nil)
 
-		bundlePath, err := ioutil.TempDir("", "dadooexecrunnerbundle")
-		Expect(err).NotTo(HaveOccurred())
-		processPath = filepath.Join(bundlePath, "the-process")
-		pidPath = filepath.Join(processPath, "0.pid")
+			bundlePath, err := ioutil.TempDir("", "dadooexecrunnerbundle")
+			Expect(err).NotTo(HaveOccurred())
+			processPath = filepath.Join(bundlePath, "the-process")
 
-		runner = dadoo.NewExecRunner("path-to-dadoo", "path-to-runc", fakeProcessIDGenerator, fakePidGetter, fakeIodaemonRunner, fakeCommandRunner)
-		log = lagertest.NewTestLogger("test")
+			runner = dadoo.NewExecRunner("path-to-dadoo", "path-to-runc", fakeProcessIDGenerator, fakePidGetter, fakeIodaemonRunner, fakeCommandRunner)
+			log = lagertest.NewTestLogger("test")
 
-		runcReturns = 0
-		dadooReturns = nil
-		dadooWritesLogs = `time="2016-03-02T13:56:38Z" level=warning msg="signal: potato"
+			runcReturns = 0
+			dadooReturns = nil
+			dadooWritesLogs = `time="2016-03-02T13:56:38Z" level=warning msg="signal: potato"
 				time="2016-03-02T13:56:38Z" level=error msg="fork/exec POTATO: no such file or directory"
 				time="2016-03-02T13:56:38Z" level=fatal msg="Container start failed: [10] System error: fork/exec POTATO: no such file or directory"`
 
-		// dadoo should open up its end of the named pipes
-		fakeCommandRunner.WhenRunning(fake_command_runner.CommandSpec{
-			Path: "path-to-dadoo",
-		}, func(cmd *exec.Cmd) error {
-			var err error
-			receivedStdinContents, err = ioutil.ReadAll(cmd.Stdin)
-			Expect(err).NotTo(HaveOccurred())
-
-			// dup the fd so that the runner is allowed to close it
-			// in a real fork/exec this'd happen as part of the fork
-			fd3fd, err := syscall.Dup(int(cmd.ExtraFiles[0].Fd()))
-			Expect(err).NotTo(HaveOccurred())
-			fd3 := os.NewFile(uintptr(fd3fd), "fd3dup")
-
-			fd4fd, err := syscall.Dup(int(cmd.ExtraFiles[1].Fd()))
-			Expect(err).NotTo(HaveOccurred())
-			fd4 := os.NewFile(uintptr(fd4fd), "fd4dup")
-
-			fd5fd, err := syscall.Dup(int(cmd.ExtraFiles[2].Fd()))
-			Expect(err).NotTo(HaveOccurred())
-			fd5 := os.NewFile(uintptr(fd5fd), "fd5dup")
-
-			go func(cmd *exec.Cmd) {
-				defer GinkgoRecover()
-
-				fs := flag.NewFlagSet("something", flag.PanicOnError)
-				fs.Bool("tty", false, "")
-				fs.Int("uid", 0, "")
-				fs.Int("gid", 0, "")
-				fs.String("waitSock", "", "")
-				fs.Parse(cmd.Args[1:])
-				dir := fs.Arg(2)
-
-				// open all the IO pipes
-				si, err := os.Open(filepath.Join(dir, "stdin"))
+			// dadoo should open up its end of the named pipes
+			fakeCommandRunner.WhenRunning(fake_command_runner.CommandSpec{
+				Path: "path-to-dadoo",
+			}, func(cmd *exec.Cmd) error {
+				var err error
+				receivedStdinContents, err = ioutil.ReadAll(cmd.Stdin)
 				Expect(err).NotTo(HaveOccurred())
 
-				so, err := os.OpenFile(filepath.Join(dir, "stdout"), os.O_APPEND|os.O_WRONLY, 0600)
+				// dup the fd so that the runner is allowed to close it
+				// in a real fork/exec this'd happen as part of the fork
+				fd3fd, err := syscall.Dup(int(cmd.ExtraFiles[0].Fd()))
 				Expect(err).NotTo(HaveOccurred())
+				fd3 := os.NewFile(uintptr(fd3fd), "fd3dup")
 
-				se, err := os.OpenFile(filepath.Join(dir, "stderr"), os.O_APPEND|os.O_WRONLY, 0600)
+				fd4fd, err := syscall.Dup(int(cmd.ExtraFiles[1].Fd()))
 				Expect(err).NotTo(HaveOccurred())
+				fd4 := os.NewFile(uintptr(fd4fd), "fd4dup")
 
-				if readWindowSize {
-					go func() {
-						for {
-							json.NewDecoder(fd5).Decode(&receivedWinSize)
-							readWindowSizeCh <- struct{}{}
-						}
-					}()
-				}
-
-				// write log file to fd4
-				_, err = io.Copy(fd4, bytes.NewReader([]byte(dadooWritesLogs)))
+				fd5fd, err := syscall.Dup(int(cmd.ExtraFiles[2].Fd()))
 				Expect(err).NotTo(HaveOccurred())
-				fd4.Close()
+				fd5 := os.NewFile(uintptr(fd5fd), "fd5dup")
 
-				// return exit status on fd3
-				_, err = fd3.Write([]byte{runcReturns})
-				Expect(err).NotTo(HaveOccurred())
-				fd3.Close()
+				go func(cmd *exec.Cmd) {
+					defer GinkgoRecover()
 
-				// do some test IO (directly write to stdout and copy stdin->stderr)
-				so.WriteString("hello stdout")
-				_, err = io.Copy(se, si)
-				Expect(err).NotTo(HaveOccurred())
+					fs := flag.NewFlagSet("something", flag.PanicOnError)
+					fs.Bool("tty", false, "")
+					fs.Int("uid", 0, "")
+					fs.Int("gid", 0, "")
+					fs.String("waitSock", "", "")
+					fs.Parse(cmd.Args[1:])
+					dir := fs.Arg(2)
 
-			}(cmd)
+					// open all the IO pipes
+					si, err := os.Open(filepath.Join(dir, "stdin"))
+					Expect(err).NotTo(HaveOccurred())
 
-			return dadooReturns
+					so, err := os.OpenFile(filepath.Join(dir, "stdout"), os.O_APPEND|os.O_WRONLY, 0600)
+					Expect(err).NotTo(HaveOccurred())
+
+					se, err := os.OpenFile(filepath.Join(dir, "stderr"), os.O_APPEND|os.O_WRONLY, 0600)
+					Expect(err).NotTo(HaveOccurred())
+
+					if readWindowSize {
+						go func() {
+							for {
+								json.NewDecoder(fd5).Decode(&receivedWinSize)
+								readWindowSizeCh <- struct{}{}
+							}
+						}()
+					}
+
+					// write log file to fd4
+					_, err = io.Copy(fd4, bytes.NewReader([]byte(dadooWritesLogs)))
+					Expect(err).NotTo(HaveOccurred())
+					fd4.Close()
+
+					// return exit status on fd3
+					_, err = fd3.Write([]byte{runcReturns})
+					Expect(err).NotTo(HaveOccurred())
+					fd3.Close()
+
+					// do some test IO (directly write to stdout and copy stdin->stderr)
+					so.WriteString("hello stdout")
+					_, err = io.Copy(se, si)
+					Expect(err).NotTo(HaveOccurred())
+
+				}(cmd)
+
+				return dadooReturns
+			})
 		})
-	})
-
-	Describe("Run", func() {
 		Describe("Delegating to IODaemonExecRunner", func() {
 			Context("when USE_DADOO is not set as an Environment variable", func() {
 				It("delegates directly to iodaemon execer", func() {
@@ -478,11 +475,94 @@ var _ = Describe("Dadoo ExecRunner", func() {
 		})
 	})
 
-	Describe("Attach", func() {
-		It("delegated directly to iodaemon execer", func() {
-			runner.Attach(log, "some-process-id", garden.ProcessIO{}, processPath)
+	FDescribe("Attach", func() {
+		var (
+			fakeIodaemonRunner     *fakes.FakeExecRunner
+			fakeCommandRunner      *fake_command_runner.FakeCommandRunner
+			fakeProcessIDGenerator *fakes.FakeUidGenerator
+			fakePidGetter          *dadoofakes.FakePidGetter
+			runner                 *dadoo.ExecRunner
+			processPath            string
+			pidPath                string
+			log                    *lagertest.TestLogger
+			stdout, stderr         *gbytes.Buffer
+		)
 
-			Expect(fakeIodaemonRunner.AttachCallCount()).To(Equal(1))
+		BeforeEach(func() {
+			fakeIodaemonRunner = new(fakes.FakeExecRunner)
+			fakeCommandRunner = fake_command_runner.New()
+			fakeProcessIDGenerator = new(fakes.FakeUidGenerator)
+			fakePidGetter = new(dadoofakes.FakePidGetter)
+
+			fakeProcessIDGenerator.GenerateReturns("the-pid")
+			fakePidGetter.PidReturns(0, nil)
+
+			bundlePath, err := ioutil.TempDir("", "dadooexecrunnerbundle")
+			Expect(err).NotTo(HaveOccurred())
+			processPath = filepath.Join(bundlePath, "the-process")
+			pidPath = filepath.Join(processPath, "the-pid")
+			Expect(os.MkdirAll(pidPath, 0700)).To(Succeed())
+
+			runner = dadoo.NewExecRunner("path-to-dadoo", "path-to-runc", fakeProcessIDGenerator, fakePidGetter, fakeIodaemonRunner, fakeCommandRunner)
+			log = lagertest.NewTestLogger("test")
+		})
+
+		FContext("when the named pipes are around", func() {
+			BeforeEach(func() {
+				// create all the IO pipes
+				err := syscall.Mkfifo(filepath.Join(pidPath, "stdin"), 0)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = syscall.Mkfifo(filepath.Join(pidPath, "stdout"), 0)
+				Expect(err).NotTo(HaveOccurred())
+
+				err = syscall.Mkfifo(filepath.Join(pidPath, "stdierr"), 0)
+				Expect(err).NotTo(HaveOccurred())
+
+				// open all the IO pipes
+				stdout = gbytes.NewBuffer()
+				stderr = gbytes.NewBuffer()
+
+				go func() {
+					fmt.Printf("1test: %s\n", pidPath)
+					si, err := os.Open(filepath.Join(pidPath, "stdin"))
+					Expect(err).NotTo(HaveOccurred())
+					fmt.Printf("2test: %s\n", pidPath)
+
+					fmt.Printf("3test: %s\n", pidPath)
+					so, err := os.OpenFile(filepath.Join(pidPath, "stdout"), os.O_APPEND|os.O_WRONLY, 0600)
+					Expect(err).NotTo(HaveOccurred())
+					fmt.Printf("1test: %s\n", pidPath)
+
+					fmt.Printf("1test: %s\n", pidPath)
+					se, err := os.OpenFile(filepath.Join(pidPath, "stderr"), os.O_APPEND|os.O_WRONLY, 0600)
+					Expect(err).NotTo(HaveOccurred())
+					fmt.Printf("1test: %s\n", pidPath)
+
+					// do some test IO (directly write to stdout and copy stdin->stderr)
+					so.WriteString("hello stdout")
+					_, err = io.Copy(se, si)
+					Expect(err).NotTo(HaveOccurred())
+				}()
+			})
+
+			It("can get stdout/err from the reattached process", func() {
+				_, err := runner.Attach(log, "the-pid", garden.ProcessIO{
+					Stdout: stdout,
+					Stderr: stderr,
+					Stdin:  strings.NewReader("omg"),
+				}, processPath)
+				Expect(err).NotTo(HaveOccurred())
+
+				// process.Wait()
+				Eventually(stdout).Should(gbytes.Say("hello stdout"))
+				Eventually(stderr).Should(gbytes.Say("omg"))
+			})
+		})
+
+		Context("when the names pipes are gone", func() {
+			It("can still get the stdout/err from the reattached process", func() {
+			})
 		})
 	})
 })
