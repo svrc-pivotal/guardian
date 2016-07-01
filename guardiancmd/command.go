@@ -382,11 +382,6 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 		dnsServers[i] = ip.IP()
 	}
 
-	var networkHookers []kawasaki.NetworkHooker
-	if cmd.Network.Plugin.Path() != "" {
-		networkHookers = append(networkHookers, netplugin.New(cmd.Network.Plugin.Path(), cmd.Network.PluginExtraArgs...))
-	}
-
 	iptRunner := &logging.Runner{CommandRunner: linux_command_runner.New(), Logger: log.Session("iptables-runner")}
 	ipTables := iptables.New(cmd.Bin.IPTables.Path(), iptRunner, chainPrefix)
 	ipTablesStarter := iptables.NewStarter(ipTables, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
@@ -406,9 +401,17 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 		iptables.NewFirewallOpener(ipTables),
 	)
 
+	networkers := []kawasaki.Networker{kawasakiNetworker}
+	if cmd.Network.Plugin.Path() != "" {
+		networkers = append(networkers, netplugin.New(
+			linux_command_runner.New(),
+			cmd.Network.Plugin.Path(),
+			cmd.Network.PluginExtraArgs...,
+		))
+	}
+
 	networker := &kawasaki.CompositeNetworker{
-		Networker:  kawasakiNetworker,
-		ExtraHooks: networkHookers,
+		Networkers: networkers,
 	}
 
 	return networker, ipTablesStarter, nil

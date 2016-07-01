@@ -11,11 +11,8 @@ import (
 	"github.com/cloudfoundry-incubator/cf-lager"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/dns"
-	"github.com/cloudfoundry-incubator/guardian/kawasaki/factory"
-	"github.com/cloudfoundry-incubator/guardian/kawasaki/iptables"
 	"github.com/cloudfoundry-incubator/guardian/pkg/vars"
 	"github.com/cloudfoundry-incubator/guardian/rundmc/goci"
-	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pivotal-golang/lager"
@@ -83,16 +80,16 @@ func main() {
 
 	logger.Info("start")
 
-	configurer := factory.NewDefaultConfigurer(iptables.New(ipTablesBinPath, linux_command_runner.New(), config.IPTablePrefix))
-	dnsResolvConfigurer := wireDNSResolvConfigurer(state, config)
-	hookActioner := &kawasaki.HookActioner{
-		Configurer:          configurer,
-		DnsResolvConfigurer: dnsResolvConfigurer,
-	}
+	// dnsResolvConfigurer := wireDNSResolvConfigurer(state, config)
+	// configurer := factory.NewDefaultConfigurer(iptables.New(ipTablesBinPath, linux_command_runner.New(), config.IPTablePrefix), *dnsResolvConfigurer)
+	// hookActioner := &kawasaki.HookActioner{
+	// 	Configurer:          configurer,
+	// 	DnsResolvConfigurer: dnsResolvConfigurer,
+	// }
 
-	if err := hookActioner.Run(logger, action, config, fmt.Sprintf("/proc/%d/ns/net", state.Pid)); err != nil {
-		panic(err)
-	}
+	// if err := hookActioner.Run(logger, action, config, fmt.Sprintf("/proc/%d/ns/net", state.Pid)); err != nil {
+	// 	panic(err)
+	// }
 }
 
 func extractRootIds(bndl goci.Bndl) (int, int) {
