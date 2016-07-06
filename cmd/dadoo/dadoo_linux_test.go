@@ -108,6 +108,63 @@ var _ = Describe("Dadoo", func() {
 			Eventually(sess).Should(gexec.Exit(24))
 		})
 
+		It("should write the exit code to a file named exitcode in the container dir", func() {
+			processSpec, err := json.Marshal(&specs.Process{
+				Args: []string{"/bin/sh", "-c", "exit 24"},
+				Cwd:  "/",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd := exec.Command(dadooBinPath, "exec", "runc", processDir, filepath.Base(bundlePath))
+			cmd.Stdin = bytes.NewReader(processSpec)
+			cmd.ExtraFiles = []*os.File{mustOpen("/dev/null"), mustOpen("/dev/null"), mustOpen("/dev/null")}
+
+			sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+			Expect(err).NotTo(HaveOccurred())
+			Eventually(sess).Should(gexec.Exit(24))
+
+			Eventually(filepath.Join(processDir, "exitcode")).Should(BeAnExistingFile())
+			Expect(ioutil.ReadFile(filepath.Join(processDir, "exitcode"))).To(Equal([]byte("24")))
+		})
+
+		It("should open the exit pipe and close it when it exits", func() {
+			stdinPipe := filepath.Join(processDir, "stdin")
+			Expect(syscall.Mkfifo(stdinPipe, 0)).To(Succeed())
+
+			exitPipe := filepath.Join(processDir, "exit")
+			Expect(syscall.Mkfifo(exitPipe, 0)).To(Succeed())
+
+			processSpec, err := json.Marshal(&specs.Process{
+				Args: []string{"/bin/sh", "-c", "cat <&0"},
+				Cwd:  "/",
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd := exec.Command(dadooBinPath, "exec", "runc", processDir, filepath.Base(bundlePath))
+			cmd.Stdin = bytes.NewReader(processSpec)
+			cmd.ExtraFiles = []*os.File{mustOpen("/dev/null"), mustOpen("/dev/null"), mustOpen("/dev/null")}
+
+			_, err = gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+			Expect(err).NotTo(HaveOccurred())
+
+			exitFifoCh := make(chan struct{})
+			go func() {
+				exitFifo, err := os.Open(filepath.Join(processDir, "exit"))
+				Expect(err).NotTo(HaveOccurred())
+
+				buf := make([]byte, 1)
+				exitFifo.Read(buf)
+				close(exitFifoCh)
+			}()
+
+			stdin, err := os.OpenFile(filepath.Join(processDir, "stdin"), os.O_WRONLY, 0600)
+			Expect(err).NotTo(HaveOccurred())
+
+			Consistently(exitFifoCh).ShouldNot(BeClosed())
+			Expect(stdin.Close()).To(Succeed()) // should cause cat <&0 to complete
+			Eventually(exitFifoCh).Should(BeClosed())
+		})
+
 		It("should not destroy the container when the exec process exits", func() {
 			processSpec, err := json.Marshal(&specs.Process{
 				Args: []string{"/bin/sh", "-c", "exit 24"},
@@ -175,39 +232,6 @@ var _ = Describe("Dadoo", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(string(stdout)).To(Equal("hello"))
-			})
-
-			It("should remove the process directory when it exits", func() {
-				spec := specs.Process{
-					Args: []string{"/bin/sh", "-c", "cat <&0"},
-					Cwd:  "/",
-				}
-
-				encSpec, err := json.Marshal(spec)
-				Expect(err).NotTo(HaveOccurred())
-
-				cmd := exec.Command(dadooBinPath, "exec", "runc", processDir, filepath.Base(bundlePath))
-				cmd.Stdin = bytes.NewReader(encSpec)
-				cmd.ExtraFiles = []*os.File{mustOpen("/dev/null"), mustOpen("/dev/null"), mustOpen("/dev/null")}
-
-				_, err = gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
-				Expect(err).NotTo(HaveOccurred())
-
-				stdinP, err := os.OpenFile(stdinPipe, os.O_WRONLY, 0600)
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = os.Open(stdoutPipe)
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = os.Open(stderrPipe)
-				Expect(err).NotTo(HaveOccurred())
-
-				Eventually(processDir).Should(BeADirectory())
-				Consistently(processDir).Should(BeADirectory())
-
-				Expect(stdinP.Close()).To(Succeed()) // close stdin so process exits
-
-				Eventually(processDir).ShouldNot(BeADirectory())
 			})
 		})
 

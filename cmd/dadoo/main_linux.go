@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -32,7 +33,6 @@ func run() int {
 
 	flag.Parse()
 
-	command := flag.Args()[0] // e.g. exec
 	runtime := flag.Args()[1] // e.g. runc
 	dir := flag.Args()[2]     // bundlePath for run, processPath for exec
 	containerId := flag.Args()[3]
@@ -50,11 +50,13 @@ func run() int {
 	pidFilePath := filepath.Join(dir, "pidfile")
 
 	check(os.MkdirAll(dir, 0700))
-	defer os.RemoveAll(dir) // for exec dadoo is responsible for creating & cleaning up
 
 	stdin := forwardReadFIFO(filepath.Join(dir, "stdin"))
 	stdout := forwardWriteFIFO(filepath.Join(dir, "stdout"))
 	stderr := forwardWriteFIFO(filepath.Join(dir, "stderr"))
+
+	// open so it'll be closed when we exit
+	forwardWriteFIFO(filepath.Join(dir, "exit"))
 
 	var runcStartCmd *exec.Cmd
 	if tty {
@@ -98,11 +100,9 @@ func run() int {
 			}
 
 			if wpid == containerPid {
-				if command == "run" {
-					check(exec.Command(runtime, "delete", containerId).Run())
-				}
-
-				return status.ExitStatus()
+				exitCode := status.ExitStatus()
+				check(ioutil.WriteFile(filepath.Join(dir, "exitcode"), []byte(strconv.Itoa(exitCode)), 0700))
+				return exitCode
 			}
 		}
 	}
