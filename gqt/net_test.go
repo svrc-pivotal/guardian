@@ -5,11 +5,15 @@ import (
 	"io"
 	"io/ioutil"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/cloudfoundry-incubator/guardian/gardener"
@@ -161,6 +165,10 @@ var _ = Describe("Net", func() {
 	Context("a second container", func() {
 		var originalContainer garden.Container
 
+		BeforeEach(func() {
+			args = []string{"--allow-host-access"}
+		})
+
 		JustBeforeEach(func() {
 			var err error
 			originalContainer = container
@@ -202,6 +210,65 @@ var _ = Describe("Net", func() {
 
 		It("should access internet", func() {
 			Expect(checkConnection(container, exampleDotCom.String(), 80)).To(Succeed())
+		})
+
+		FIt("can still be contacted while the other one is being destroyed", func() {
+			// this test was introduced to cover a bug where the kernel can change
+			// the bridge mac address when devices are added/removed from it,
+			// causing the networking stack to become confused and drop tcp
+			// connections. It's inherently flakey because the kernel doesn't
+			// always change the mac address, and even if it does tcp is pretty
+			// resilient. Empirically, 10 retries seems to be enough to fairly
+			// consistently fail with the old behaviour.
+			for i := 0; i < 10; i++ {
+				handles := []string{}
+				for j := 0; j < 12; j++ {
+					ctn, err := client.Create(garden.ContainerSpec{Network: containerNetwork})
+					Expect(err).ToNot(HaveOccurred())
+					handles = append(handles, ctn.Handle())
+				}
+
+				respond := make(chan struct{})
+				server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					<-respond
+					fmt.Fprintln(w, "hello")
+				}))
+
+				info, err := container.Info()
+				Expect(err).NotTo(HaveOccurred())
+				server.Listener, err = net.Listen("tcp", info.ExternalIP+":0")
+				Expect(err).NotTo(HaveOccurred())
+
+				server.Start()
+				defer server.Close()
+
+				url, err := url.Parse(server.URL)
+				Expect(err).NotTo(HaveOccurred())
+				port := strings.Split(url.Host, ":")[1]
+
+				stdout := gbytes.NewBuffer()
+				_, err = container.Run(garden.ProcessSpec{
+					User: "root",
+					Path: "sh",
+					Args: []string{"-c", fmt.Sprintf(`(echo "GET / HTTP/1.1"; echo "Host: foo.com"; echo) | nc %s %s`, info.ExternalIP, port)},
+				}, garden.ProcessIO{Stdout: stdout, Stderr: stdout})
+				Expect(err).NotTo(HaveOccurred())
+
+				var wg sync.WaitGroup
+				for _, handle := range handles {
+					wg.Add(1)
+					go func(handle string) {
+						defer GinkgoRecover()
+						defer wg.Done()
+						Expect(client.Destroy(handle)).To(Succeed())
+					}(handle)
+				}
+
+				wg.Wait()
+
+				close(respond)
+				Eventually(stdout).Should(gbytes.Say("hello"))
+			}
 		})
 	})
 
