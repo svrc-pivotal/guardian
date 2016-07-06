@@ -24,6 +24,7 @@ func NewDefaultConfigurer(ipt *iptables.IPTablesController) kawasaki.Configurer 
 		hostConfigurer,
 		containerCfgApplier,
 		iptables.NewInstanceChainCreator(ipt),
+		&netns.Opener{},
 		&netns.Execer{},
 	)
 }

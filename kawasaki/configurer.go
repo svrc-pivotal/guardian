@@ -1,9 +1,11 @@
 package kawasaki
 
 import (
+	"fmt"
 	"net"
 	"os"
 
+	"github.com/cloudfoundry-incubator/guardian/kawasaki/netns"
 	"github.com/pivotal-golang/lager"
 )
 
@@ -17,6 +19,7 @@ type configurer struct {
 	hostConfigurer       HostConfigurer
 	containerApplier     ContainerApplier
 	instanceChainCreator InstanceChainCreator
+	fileOpener           netns.Opener
 	nsExecer             NetnsExecer
 }
 
@@ -47,23 +50,25 @@ type DnsResolvConfFactory interface {
 	CreateDNSResolvConfigurer(bundlePath string, cfg NetworkConfig) DnsResolvConfigurer
 }
 
-func NewConfigurer(resolvConfFactory DnsResolvConfFactory, hostConfigurer HostConfigurer, containerApplier ContainerApplier, instanceChainCreator InstanceChainCreator, nsExecer NetnsExecer) *configurer {
+func NewConfigurer(resolvConfFactory DnsResolvConfFactory, hostConfigurer HostConfigurer, containerApplier ContainerApplier, instanceChainCreator InstanceChainCreator, fileOpener netns.Opener, nsExecer NetnsExecer) *configurer {
 	return &configurer{
 		resolvConfFactory:    resolvConfFactory,
 		hostConfigurer:       hostConfigurer,
 		containerApplier:     containerApplier,
 		instanceChainCreator: instanceChainCreator,
+		fileOpener:           fileOpener,
 		nsExecer:             nsExecer,
 	}
 }
 
-func (c *configurer) Apply(log lager.Logger, cfg NetworkConfig, nsPath string, bundlePath string) error {
+func (c *configurer) Apply(log lager.Logger, cfg NetworkConfig, pid int) error {
+	bundlePath := ""
 	dnsResolvConfigurer := c.resolvConfFactory.CreateDNSResolvConfigurer(bundlePath, cfg)
 	if err := dnsResolvConfigurer.Configure(log); err != nil {
 		return err
 	}
 
-	fd, err := os.Open(nsPath)
+	fd, err := c.fileOpener.Open(fmt.Sprintf("/proc/%d/ns/net", pid))
 	if err != nil {
 		return err
 	}

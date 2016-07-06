@@ -43,7 +43,7 @@ type ConfigCreator interface {
 //go:generate counterfeiter . Configurer
 
 type Configurer interface {
-	Apply(log lager.Logger, cfg NetworkConfig, nsPath, bundlePath string) error
+	Apply(log lager.Logger, cfg NetworkConfig, pid int) error
 	DestroyBridge(log lager.Logger, cfg NetworkConfig) error
 	DestroyIPTablesRules(log lager.Logger, cfg NetworkConfig) error
 }
@@ -93,7 +93,7 @@ type NetworkHooker interface {
 
 type Networker interface {
 	Capacity() uint64
-	Network(log lager.Logger, spec garden.ContainerSpec, pid int, bundlePath string) error
+	Network(log lager.Logger, spec garden.ContainerSpec, pid int) error
 	Destroy(log lager.Logger, handle string) error
 	NetIn(log lager.Logger, handle string, externalPort, containerPort uint32) (uint32, uint32, error)
 	NetOut(log lager.Logger, handle string, rule garden.NetOutRule) error
@@ -143,7 +143,7 @@ func New(
 	}
 }
 
-func (n *networker) Network(log lager.Logger, containerSpec garden.ContainerSpec, pid int, bundlePath string) error {
+func (n *networker) Network(log lager.Logger, containerSpec garden.ContainerSpec, pid int) error {
 	log = log.Session("network", lager.Data{
 		"handle": containerSpec.Handle,
 		"spec":   containerSpec.Network,
@@ -175,7 +175,7 @@ func (n *networker) Network(log lager.Logger, containerSpec garden.ContainerSpec
 		return err
 	}
 
-	if err := n.configurer.Apply(log, config, fmt.Sprintf("/proc/%d/ns/net", pid), bundlePath); err != nil {
+	if err := n.configurer.Apply(log, config, pid); err != nil {
 		return err
 	}
 	return nil
