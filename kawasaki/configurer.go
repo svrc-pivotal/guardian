@@ -47,7 +47,11 @@ type DnsResolvConfigurer interface {
 
 //go:generate counterfeiter . DnsResolvConfFactory
 type DnsResolvConfFactory interface {
-	CreateDNSResolvConfigurer(bundlePath string, cfg NetworkConfig) DnsResolvConfigurer
+	CreateDNSResolvConfigurer(pid int, cfg NetworkConfig) DnsResolvConfigurer
+}
+
+type ProcRootfsReader interface {
+	Rootfs(pid int) (string, error)
 }
 
 func NewConfigurer(resolvConfFactory DnsResolvConfFactory, hostConfigurer HostConfigurer, containerApplier ContainerApplier, instanceChainCreator InstanceChainCreator, fileOpener netns.Opener, nsExecer NetnsExecer) *configurer {
@@ -62,8 +66,7 @@ func NewConfigurer(resolvConfFactory DnsResolvConfFactory, hostConfigurer HostCo
 }
 
 func (c *configurer) Apply(log lager.Logger, cfg NetworkConfig, pid int) error {
-	bundlePath := ""
-	dnsResolvConfigurer := c.resolvConfFactory.CreateDNSResolvConfigurer(bundlePath, cfg)
+	dnsResolvConfigurer := c.resolvConfFactory.CreateDNSResolvConfigurer(pid, cfg)
 	if err := dnsResolvConfigurer.Configure(log); err != nil {
 		return err
 	}

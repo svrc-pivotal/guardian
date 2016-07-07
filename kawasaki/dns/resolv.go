@@ -1,7 +1,9 @@
 package dns
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 
 	"github.com/pivotal-golang/lager"
 )
@@ -20,6 +22,21 @@ type ResolvConfigurer struct {
 	HostsFileCompiler  Compiler
 	ResolvFileCompiler Compiler
 	FileWriter         FileWriter
+}
+
+type RootIdMapReader struct{}
+
+func (r *RootIdMapReader) ReadRootId(path string) (uint32, error) {
+	file, _ := os.Open(path)
+	reader := bufio.NewReader(file)
+	for {
+		line, err := reader.ReadString("\n")
+
+		if err != nil {
+			break
+		}
+	}
+	return 0, nil
 }
 
 func (d *ResolvConfigurer) Configure(log lager.Logger) error {
