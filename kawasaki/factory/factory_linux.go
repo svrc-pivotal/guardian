@@ -1,6 +1,8 @@
 package factory
 
 import (
+	"os"
+
 	"github.com/cloudfoundry-incubator/guardian/kawasaki"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/configure"
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/devices"
@@ -24,7 +26,7 @@ func NewDefaultConfigurer(ipt *iptables.IPTablesController) kawasaki.Configurer 
 		hostConfigurer,
 		containerCfgApplier,
 		iptables.NewInstanceChainCreator(ipt),
-		&netns.Opener{},
+		os.Open,
 		&netns.Execer{},
 	)
 }
