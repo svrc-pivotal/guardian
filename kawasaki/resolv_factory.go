@@ -6,16 +6,11 @@ import (
 	"github.com/cloudfoundry-incubator/guardian/kawasaki/dns"
 )
 
-// type IdMapReader struct{}
-
-// func (i *IdMapReadeer) readId(id) (string, string)
-
-// type ResolvFactory struct {
-// 	idMapReader IdMapReader
-// }
+type ResolvFactory struct {
+	idMapReader dns.RootIdMapReader
+}
 
 func (r *ResolvFactory) CreateDNSResolvConfigurer(pid int, config NetworkConfig) DnsResolvConfigurer {
-	rootUid, rootGid := r.idMapReader.extractRootIds(pid)
 
 	configurer := &dns.ResolvConfigurer{
 		HostsFileCompiler: &dns.HostsFileCompiler{

@@ -50,10 +50,6 @@ type DnsResolvConfFactory interface {
 	CreateDNSResolvConfigurer(pid int, cfg NetworkConfig) DnsResolvConfigurer
 }
 
-type ProcRootfsReader interface {
-	Rootfs(pid int) (string, error)
-}
-
 func NewConfigurer(resolvConfFactory DnsResolvConfFactory, hostConfigurer HostConfigurer, containerApplier ContainerApplier, instanceChainCreator InstanceChainCreator, fileOpener netns.Opener, nsExecer NetnsExecer) *configurer {
 	return &configurer{
 		resolvConfFactory:    resolvConfFactory,
