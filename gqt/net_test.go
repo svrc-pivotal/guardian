@@ -19,7 +19,7 @@ import (
 	"github.com/onsi/gomega/gexec"
 )
 
-var _ = Describe("Networking", func() {
+var _ = FDescribe("Networking", func() {
 	var (
 		client    *runner.RunningGarden
 		container garden.Container
@@ -350,6 +350,18 @@ var _ = Describe("Networking", func() {
 
 			It("propagates those properties as JSON to the network plugin up action", func() {
 				Eventually(getFlagValue(tmpFile, "--properties")).Should(MatchJSON(expectedJSON))
+			})
+		})
+
+		FContext("when the network plugin returns properties", func() {
+			It("persits the returned properties to the container's properties", func() {
+				info, err := container.Info()
+				Expect(err).NotTo(HaveOccurred())
+
+				containerProperties := info.Properties
+
+				Expect(containerProperties["foo"]).To(Equal("bar"))
+				Expect(containerProperties["ping"]).To(Equal("pong"))
 			})
 		})
 	})
