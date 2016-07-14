@@ -1,13 +1,52 @@
 package kawasaki
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+
+	"github.com/docker/docker/pkg/reexec"
 
 	"code.cloudfoundry.org/guardian/kawasaki/netns"
 	"code.cloudfoundry.org/lager"
 )
+
+func init() {
+	reexec.Register("nsExec", func() {
+		var netNsPath, containerIntf, containerIP, bridgeIP, subnet, mtu string
+		flag.StringVar(&netNsPath, "netNsPath", "", "netNsPath")
+		flag.StringVar(&containerIntf, "containerIntf", "", "containerIntf")
+		flag.StringVar(&containerIP, "containerIP", "", "containerIP")
+		flag.StringVar(&bridgeIP, "bridgeIP", "", "bridgeIP")
+		flag.StringVar(&subnet, "subnet", "", "subnet")
+		flag.StringVar(&mtu, "mtu", "", "mtu")
+		flag.Parse()
+
+		_, subnetIPNet, _ := net.ParseCIDR(subnet)
+		mtuInt, _ := strconv.Atoi(mtu)
+
+		cfg := NetworkConfig{
+			ContainerIntf: containerIntf,
+			ContainerIP:   net.ParseIP(containerIP),
+			BridgeIP:      net.ParseIP(bridgeIP),
+			Subnet:        subnetIPNet,
+			Mtu:           mtuInt,
+		}
+
+		fd, _ := os.Open(netNsPath)
+		defer fd.Close()
+
+		netNsExecer := &netns.Execer{}
+
+		c := &configurer{}
+
+		netNsExecer.Exec(fd, func() error {
+			return c.containerApplier.Apply(nil, cfg)
+		})
+	})
+}
 
 //go:generate counterfeiter . NetnsExecer
 type NetnsExecer interface {
@@ -85,9 +124,20 @@ func (c *configurer) Apply(log lager.Logger, cfg NetworkConfig, pid int) error {
 		return err
 	}
 
-	return c.nsExecer.Exec(fd, func() error {
-		return c.containerApplier.Apply(log, cfg)
-	})
+	cmd := reexec.Command("nsExec",
+		"-netNsPath", fmt.Sprintf("/proc/%d/ns/net", pid),
+		"-containerIntf", cfg.ContainerIntf,
+		"-containerIP", cfg.ContainerIP.String(),
+		"-bridgeIP", cfg.BridgeIP.String(),
+		"-subnet", cfg.Subnet.String(),
+		"-mtu", string(cfg.Mtu),
+	)
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	return cmd.Wait()
 }
 
 func (c *configurer) DestroyBridge(log lager.Logger, cfg NetworkConfig) error {
