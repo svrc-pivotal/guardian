@@ -36,7 +36,7 @@ func (d *DirectoryDepot) Create(log lager.Logger, handle string, bundle BundleSa
 	defer log.Info("finished")
 
 	path := d.toDir(handle)
-	if err := os.MkdirAll(path, 0700); err != nil {
+	if err := os.MkdirAll(path, 0777); err != nil {
 		log.Error("mkdir-failed", err, lager.Data{"path": path})
 		return err
 	}

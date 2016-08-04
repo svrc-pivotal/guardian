@@ -190,10 +190,10 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 
 			log.Info("start")
 
-			err := g.destroy(log, spec.Handle)
-			if err != nil {
-				log.Error("destroy-failed", err)
-			}
+			// err := g.destroy(log, spec.Handle)
+			// if err != nil {
+			// 	log.Error("destroy-failed", err)
+			// }
 
 			log.Info("cleanedup")
 		} else {

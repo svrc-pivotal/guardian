@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/lager"
@@ -28,10 +29,27 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 
 	defer log.Info("finished")
 
+	// HACK?: ensure bundlePath is writable by non-root user
+	s := fmt.Sprintf("BUNDLE PATH IS: %s and DIR is: %s", bundlePath, filepath.Dir(bundlePath))
+	log.Info(s)
+	// BUNDLE PATH IS: /tmp/test-garden-3/containers/eddfd82f-5a18-41a7-6726-799d84ba01cb
+	if err := os.Chown(bundlePath, 1000, 1000); err != nil {
+		log.Error("chown-failed", err, lager.Data{"path": bundlePath})
+		return err
+	}
+
 	logFilePath := filepath.Join(bundlePath, "create.log")
 	pidFilePath := filepath.Join(bundlePath, "pidfile")
 
 	cmd := exec.Command(c.runcPath, "--debug", "--log", logFilePath, "create", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
+
+	// HACK: run runc as non-root user
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: 1000,
+			Gid: 1000,
+		},
+	}
 
 	log.Info("creating", lager.Data{
 		"runc":        c.runcPath,
