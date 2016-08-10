@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/lager"
 
 	"github.com/nu7hatch/gouuid"
-	"github.com/opencontainers/runtime-spec/specs-go"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 
 	"code.cloudfoundry.org/garden-shed/distclient"
 	quotaed_aufs "code.cloudfoundry.org/garden-shed/docker_drivers/aufs"
@@ -232,7 +233,7 @@ func (cmd *GuardianCommand) Execute([]string) error {
 func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{}) error {
 	logger, reconfigurableSink := cmd.Logger.Logger("guardian")
 
-	propManager, err := cmd.loadProperties(logger, cmd.Containers.PropertiesPath)
+	propManager, err := cmd.loadProperties(logger, cmd.Containers.Dir.Path())
 	if err != nil {
 		return err
 	}
@@ -316,7 +317,12 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 
 	gardenServer.Stop()
 
-	cmd.saveProperties(logger, cmd.Containers.PropertiesPath, propManager)
+	containers, err := backend.Containers(garden.Properties{})
+	if err != nil {
+		logger.Error("failed-to-fetch-containers", err)
+		return err
+	}
+	cmd.saveProperties(logger, cmd.Containers.Dir.Path(), containers)
 
 	portPoolState = portPool.RefreshState()
 	ports.SaveState(cmd.Network.PortPoolPropertiesPath, portPoolState)
@@ -324,21 +330,26 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 	return nil
 }
 
-func (cmd *GuardianCommand) loadProperties(logger lager.Logger, propertiesPath string) (*properties.Manager, error) {
-	propManager, err := properties.Load(propertiesPath)
+func (cmd *GuardianCommand) loadProperties(logger lager.Logger, depotDirPath string) (*properties.Manager, error) {
+	propManager, err := properties.Load(depotDirPath)
 	if err != nil {
-		logger.Error("failed-to-load-properties", err, lager.Data{"propertiesPath": propertiesPath})
+		logger.Error("failed-to-load-properties", err, lager.Data{"depotDirPath": depotDirPath})
 		return &properties.Manager{}, err
 	}
 
 	return propManager, nil
 }
 
-func (cmd *GuardianCommand) saveProperties(logger lager.Logger, propertiesPath string, propManager *properties.Manager) {
-	if propertiesPath != "" {
-		err := properties.Save(propertiesPath, propManager)
+func (cmd *GuardianCommand) saveProperties(logger lager.Logger, depotDirPath string, containers []garden.Container) {
+	for _, container := range containers {
+		propertiesFile := filepath.Join(depotDirPath, container.Handle(), "props.json")
+		containerProps, err := container.Properties()
 		if err != nil {
-			logger.Error("failed-to-save-properties", err, lager.Data{"propertiesPath": propertiesPath})
+			logger.Error("failed-to-get-container-properties", err, lager.Data{"container": container})
+		}
+
+		if err := properties.Save(propertiesFile, containerProps); err != nil {
+			logger.Error("failed-to-save-properties", err, lager.Data{"propertiesFile": propertiesFile})
 		}
 	}
 }

@@ -1,9 +1,9 @@
 package gqt_test
 
 import (
-	"io/ioutil"
+	"encoding/json"
 	"os"
-	"path"
+	"path/filepath"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gardener"
@@ -23,9 +23,6 @@ var _ = Describe("Properties", func() {
 
 	BeforeEach(func() {
 		var err error
-		propertiesDir, err = ioutil.TempDir("", "props")
-		Expect(err).NotTo(HaveOccurred())
-		args = append(args, "--properties-path", path.Join(propertiesDir, "props.json"))
 
 		client = startGarden(args...)
 		props = garden.Properties{"somename": "somevalue"}
@@ -104,6 +101,23 @@ var _ = Describe("Properties", func() {
 		Expect(props).To(HaveKey("kawasaki.container-interface"))
 		Expect(props).To(HaveKey(gardener.ExternalIPKey))
 		Expect(props).To(HaveKey("kawasaki.mtu"))
+	})
+
+	It("should store properties in the bundle directory", func() {
+		Expect(client.Stop()).To(Succeed())
+		propertiesFile := filepath.Join(client.DepotDir, container.Handle(), "props.json")
+		Expect(propertiesFile).To(BeAnExistingFile())
+
+		file, err := os.Open(propertiesFile)
+		Expect(err).NotTo(HaveOccurred())
+
+		properties := garden.Properties{}
+		decoder := json.NewDecoder(file)
+		Expect(decoder.Decode(&properties)).To(Succeed())
+
+		Expect(properties).To(HaveKeyWithValue("somename", "somevalue"))
+
+		client = startGarden(args...)
 	})
 
 	Context("after a server restart", func() {
