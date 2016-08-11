@@ -164,7 +164,7 @@ var _ = Describe("Run", func() {
 	})
 
 	Context("when container is privileged", func() {
-		It("can run a process as a particular user", func() {
+		FIt("can run a process as a particular user", func() {
 			client = startGarden()
 			container, err := client.Create(garden.ContainerSpec{
 				Privileged: true,

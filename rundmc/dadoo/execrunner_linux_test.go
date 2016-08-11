@@ -593,7 +593,7 @@ var _ = Describe("Dadoo ExecRunner", func() {
 			Expect(process.ID()).To(Equal("some-process-id"))
 		})
 
-		It("reattaches to the stdout output", func() {
+		FIt("reattaches to the stdout output", func() {
 			stdout := gbytes.NewBuffer()
 			_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
 				Stdout: stdout,
@@ -648,13 +648,13 @@ func dup(f *os.File) *os.File {
 }
 
 func openPipes(dir string) (stdin, stdout, stderr, winsz, exit *os.File) {
-	si, err := os.Open(filepath.Join(dir, "stdin"))
+	si, err := os.OpenFile(filepath.Join(dir, "stdin"), os.O_RDWR, 0600)
 	Expect(err).NotTo(HaveOccurred())
 
-	so, err := os.OpenFile(filepath.Join(dir, "stdout"), os.O_APPEND|os.O_WRONLY, 0600)
+	so, err := os.OpenFile(filepath.Join(dir, "stdout"), os.O_APPEND|os.O_RDWR, 0600)
 	Expect(err).NotTo(HaveOccurred())
 
-	se, err := os.OpenFile(filepath.Join(dir, "stderr"), os.O_APPEND|os.O_WRONLY, 0600)
+	se, err := os.OpenFile(filepath.Join(dir, "stderr"), os.O_APPEND|os.O_RDWR, 0600)
 	Expect(err).NotTo(HaveOccurred())
 
 	exit, err = os.OpenFile(filepath.Join(dir, "exit"), os.O_APPEND|os.O_RDWR, 0600)

@@ -206,7 +206,7 @@ func (p *process) mkfifos() error {
 }
 
 func (p process) start(pio garden.ProcessIO, ttySize *garden.TTYSpec) error {
-	stdin, err := os.OpenFile(p.stdin, os.O_WRONLY, 0600)
+	stdin, err := os.OpenFile(p.stdin, os.O_RDWR, 0600)
 	if err != nil {
 		return err
 	}
@@ -218,8 +218,13 @@ func (p process) start(pio garden.ProcessIO, ttySize *garden.TTYSpec) error {
 		}()
 	}
 
-	stdout, err := os.Open(p.stdout)
+	stdout, err := os.OpenFile(p.stdout, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
+	// stdout, err := os.Open(p.stdout)
 	if err != nil {
+		return err
+	}
+	// go back to blocking mode so Read below blocks
+	if err := syscall.SetNonblock(int(stdout.Fd()), false); err != nil {
 		return err
 	}
 
@@ -231,8 +236,13 @@ func (p process) start(pio garden.ProcessIO, ttySize *garden.TTYSpec) error {
 		}()
 	}
 
-	stderr, err := os.Open(p.stderr)
+	// stderr, err := os.Open(p.stderr)
+	stderr, err := os.OpenFile(p.stderr, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
 	if err != nil {
+		return err
+	}
+
+	if err := syscall.SetNonblock(int(stderr.Fd()), false); err != nil {
 		return err
 	}
 
