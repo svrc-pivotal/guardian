@@ -554,7 +554,7 @@ var _ = Describe("Dadoo ExecRunner", func() {
 		})
 
 		Context("when dadoo has already exited", func() {
-			It("does not hang", func() {
+			FIt("does not hang", func() {
 				dadooWritesExitCode = []byte("42")
 
 				// attach once, exit pipe will be open so this will work

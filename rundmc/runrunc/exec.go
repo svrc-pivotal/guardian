@@ -85,6 +85,8 @@ func (e *Execer) Exec(log lager.Logger, bundlePath, id string, spec garden.Proce
 // Attach attaches to an already running process by guid
 func (e *Execer) Attach(log lager.Logger, bundlePath, id, processID string, io garden.ProcessIO) (garden.Process, error) {
 	processesPath := path.Join(bundlePath, "processes")
+	log.Info("exec-attach-start")
+	defer log.Info("exec-attach-completed")
 	return e.runner.Attach(log, processID, io, processesPath)
 }
 

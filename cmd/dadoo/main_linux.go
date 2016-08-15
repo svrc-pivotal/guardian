@@ -110,9 +110,12 @@ func waitForContainerToExit(dir string, containerPid int, signals chan os.Signal
 }
 
 func openPipes(dir string) (io.Reader, io.Writer, io.Writer, io.Reader) {
-	stdin := openFifo(filepath.Join(dir, "stdin"), os.O_RDONLY)
-	stdout := openFifo(filepath.Join(dir, "stdout"), os.O_WRONLY|os.O_APPEND)
-	stderr := openFifo(filepath.Join(dir, "stderr"), os.O_WRONLY|os.O_APPEND)
+	// stdin := openFifo(filepath.Join(dir, "stdin"), os.O_RDONLY)
+	// stdout := openFifo(filepath.Join(dir, "stdout"), os.O_WRONLY|os.O_APPEND)
+	// stderr := openFifo(filepath.Join(dir, "stderr"), os.O_WRONLY|os.O_APPEND)
+	stdin := openFifo(filepath.Join(dir, "stdin"), os.O_RDWR)
+	stdout := openFifo(filepath.Join(dir, "stdout"), os.O_RDWR|os.O_APPEND)
+	stderr := openFifo(filepath.Join(dir, "stderr"), os.O_RDWR|os.O_APPEND)
 	winsz := openFifo(filepath.Join(dir, "winsz"), os.O_RDWR)
 	openFifo(filepath.Join(dir, "exit"), os.O_RDWR) // open just so guardian can detect it being closed when we exit
 

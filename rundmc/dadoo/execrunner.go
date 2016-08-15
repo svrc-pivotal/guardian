@@ -110,7 +110,9 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 	fd3w.Close()
 	logw.Close()
 
-	if err := process.start(pio, tty); err != nil {
+	// if err := process.start(log, pio, tty); err != nil {
+	stdin, stdout, stderr, err := process.oPipes(log, pio)
+	if err != nil {
 		return nil, err
 	}
 
@@ -118,6 +120,7 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 
 	runcExitStatus := make([]byte, 1)
 	fd3r.Read(runcExitStatus)
+	process.stream(log, stdin, stdout, stderr, pio)
 
 	log.Info("runc-exit-status", lager.Data{"status": runcExitStatus[0]})
 
@@ -133,9 +136,12 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 }
 
 func (d *ExecRunner) Attach(log lager.Logger, processID string, io garden.ProcessIO, processesPath string) (garden.Process, error) {
+	log.Info("attach-start")
+	defer log.Info("attach-finished")
 	processPath := filepath.Join(processesPath, processID)
 	process := newProcess(processID, processPath, filepath.Join(processPath, "pidfile"), d.pidGetter)
 	if err := process.start(io, &garden.TTYSpec{}); err != nil {
+		log.Error("attach-failed", err)
 		return nil, err
 	}
 
@@ -205,8 +211,70 @@ func (p *process) mkfifos() error {
 	return nil
 }
 
+func (p process) stream(logger lager.Logger, stdin, stdout, stderr *os.File, pio garden.ProcessIO) {
+	if pio.Stdin != nil {
+		go func() {
+			io.Copy(stdin, pio.Stdin)
+			stdin.Close()
+		}()
+	}
+
+	if pio.Stdout != nil {
+		p.ioWg.Add(1)
+		go func() {
+			io.Copy(pio.Stdout, stdout)
+			stdout.Close()
+			p.ioWg.Done()
+		}()
+	}
+
+	if pio.Stderr != nil {
+		p.ioWg.Add(1)
+		go func() {
+			io.Copy(pio.Stderr, stderr)
+			stderr.Close()
+			p.ioWg.Done()
+		}()
+	}
+}
+
+func (p process) oPipes(logger lager.Logger, pio garden.ProcessIO) (stdin, stdout, stderr *os.File, err error) {
+	log := logger.Session("process-start")
+	log.Info("start-open-stdin")
+	stdin, err = os.OpenFile(p.stdin, os.O_RDWR, 0600) // fine to open blocking as we have control over the EOF
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	log.Info("start-open-stdout")
+	stdout, err = os.OpenFile(p.stdout, os.O_RDONLY|syscall.O_NONBLOCK, 0600) // can't open blocking because other side might not be there
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Have to then set it to be blocking again, otherwise the copy below, which we have no control over here
+	// will exit it immediately and fail because it is a writer of itself
+	if err := syscall.SetNonblock(int(stdout.Fd()), false); err != nil {
+		return nil, nil, nil, err
+	}
+
+	log.Info("start-open-stderr")
+	stderr, err = os.OpenFile(p.stderr, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Have to then set it to be blocking again, otherwise the copy below, which we have no control over here
+	// will exit it immediately and fail because it is a writer of itself
+	if err := syscall.SetNonblock(int(stderr.Fd()), false); err != nil {
+		return nil, nil, nil, err
+	}
+
+	return stdin, stdout, stderr, nil
+}
+
 func (p process) start(pio garden.ProcessIO, ttySize *garden.TTYSpec) error {
-	stdin, err := os.OpenFile(p.stdin, os.O_RDWR, 0600)
+	stdin, err := os.OpenFile(p.stdin, os.O_RDWR, 0600) // fine to open blocking as we have control over the EOF
 	if err != nil {
 		return err
 	}
@@ -218,12 +286,17 @@ func (p process) start(pio garden.ProcessIO, ttySize *garden.TTYSpec) error {
 		}()
 	}
 
-	stdout, err := os.OpenFile(p.stdout, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
-	// stdout, err := os.Open(p.stdout)
+	stdout, err := os.OpenFile(p.stdout, os.O_RDONLY|syscall.O_NONBLOCK, 0600) // can't open blocking because other side might not be there
 	if err != nil {
 		return err
 	}
 	// go back to blocking mode so Read below blocks
+	if err := syscall.SetNonblock(int(stdout.Fd()), false); err != nil {
+		return err
+	}
+
+	// Have to then set it to be blocking again, otherwise the copy below, which we have no control over here
+	// will exit it immediately and fail because it is a writer of itself
 	if err := syscall.SetNonblock(int(stdout.Fd()), false); err != nil {
 		return err
 	}
@@ -236,12 +309,13 @@ func (p process) start(pio garden.ProcessIO, ttySize *garden.TTYSpec) error {
 		}()
 	}
 
-	// stderr, err := os.Open(p.stderr)
 	stderr, err := os.OpenFile(p.stderr, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
 	if err != nil {
 		return err
 	}
 
+	// Have to then set it to be blocking again, otherwise the copy below, which we have no control over here
+	// will exit it immediately and fail because it is a writer of itself
 	if err := syscall.SetNonblock(int(stderr.Fd()), false); err != nil {
 		return err
 	}

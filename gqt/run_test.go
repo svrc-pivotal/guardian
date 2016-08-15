@@ -6,7 +6,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"syscall"
+	"time"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gqt/runner"
@@ -188,6 +190,67 @@ var _ = Describe("Run", func() {
 			Expect(exitCode).To(Equal(0))
 
 			Expect(out).To(gbytes.Say("alice"))
+		})
+
+	})
+
+	Describe("when restarting garden server", func() {
+		var (
+			container garden.Container
+			processID string
+			args      []string
+		)
+
+		BeforeEach(func() {
+			propertiesDir, err := ioutil.TempDir("", "props")
+			Expect(err).NotTo(HaveOccurred())
+			args = []string{"--properties-path", path.Join(propertiesDir, "props.json")}
+
+			client = startGarden(args...)
+		})
+
+		Context("and the process/dadoo is gone", func() {
+			It("returns the exit code", func() {
+				var err error
+				container, err = client.Create(garden.ContainerSpec{})
+				Expect(err).NotTo(HaveOccurred())
+
+				process, err := container.Run(garden.ProcessSpec{
+					Path: "sh",
+					Args: []string{"-c", `
+					while true; do
+					  echo 'sleeping'
+					  sleep 1
+					done
+				`},
+				}, garden.ProcessIO{})
+
+				Expect(err).NotTo(HaveOccurred())
+
+				processID = process.ID()
+				pidfilePath := filepath.Join(client.DepotDir, container.Handle(), "processes", processID, "pidfile")
+				pidBytes, err := ioutil.ReadFile(pidfilePath)
+				Expect(err).NotTo(HaveOccurred())
+
+				restartGarden(client, args...)
+
+				pid, err := strconv.Atoi(string(pidBytes))
+				Expect(err).NotTo(HaveOccurred())
+
+				hostProcess, err := os.FindProcess(pid)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(hostProcess.Kill()).To(Succeed())
+
+				time.Sleep(time.Second * 5) // TODO: make better - ensure process has actually exited
+
+				attachedProcess, err := container.Attach(processID, garden.ProcessIO{})
+				Expect(err).NotTo(HaveOccurred())
+
+				exitCode, err := attachedProcess.Wait()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(exitCode).To(Equal(137)) // 137 = exit code when a process is KILLed
+			})
 		})
 	})
 
