@@ -29,12 +29,13 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-var _ = Describe("Dadoo ExecRunner", func() {
+var _ = FDescribe("Dadoo ExecRunner", func() {
 	var (
 		fakeCommandRunner      *fake_command_runner.FakeCommandRunner
 		fakeProcessIDGenerator *fakes.FakeUidGenerator
 		fakePidGetter          *dadoofakes.FakePidGetter
 		runner                 *dadoo.ExecRunner
+		bundlePath             string
 		processPath            string
 		pidPath                string
 		receivedStdinContents  []byte
@@ -45,9 +46,13 @@ var _ = Describe("Dadoo ExecRunner", func() {
 		log                    *lagertest.TestLogger
 		receiveWinSize         func(*os.File)
 		closeExitPipeCh        chan struct{}
+
+		testFinishedCh chan bool
 	)
 
 	BeforeEach(func() {
+		testFinishedCh = make(chan bool)
+
 		fakeCommandRunner = fake_command_runner.New()
 		fakeProcessIDGenerator = new(fakes.FakeUidGenerator)
 		fakePidGetter = new(dadoofakes.FakePidGetter)
@@ -55,7 +60,8 @@ var _ = Describe("Dadoo ExecRunner", func() {
 		fakeProcessIDGenerator.GenerateReturns("the-pid")
 		fakePidGetter.PidReturns(0, nil)
 
-		bundlePath, err := ioutil.TempDir("", "dadooexecrunnerbundle")
+		var err error
+		bundlePath, err = ioutil.TempDir("", "dadooexecrunnerbundle")
 		Expect(err).NotTo(HaveOccurred())
 		processPath = filepath.Join(bundlePath, "the-process")
 		pidPath = filepath.Join(processPath, "0.pid")
@@ -95,47 +101,68 @@ var _ = Describe("Dadoo ExecRunner", func() {
 			fd3 := dup(cmd.ExtraFiles[0])
 			fd4 := dup(cmd.ExtraFiles[1])
 
-			go func(cmd *exec.Cmd, exitCode []byte, logs []byte, closeExitPipeCh chan struct{}, recvWinSz func(*os.File)) {
-				defer GinkgoRecover()
+			if dadooReturns == nil {
 
-				// parse flags to get bundle dir argument so we can open stdin/out/err pipes
-				dadooFlags.Parse(cmd.Args[1:])
-				processDir := dadooFlags.Arg(2)
-				si, so, se, winsz, exit := openPipes(processDir)
+				go func(cmd *exec.Cmd, exitCode []byte, logs []byte, closeExitPipeCh chan struct{}, recvWinSz func(*os.File)) {
+					defer GinkgoRecover()
+					defer close(testFinishedCh)
 
-				go recvWinSz(winsz)
+					fmt.Println("A")
 
-				// write log file to fd4
-				_, err = io.Copy(fd4, bytes.NewReader([]byte(logs)))
-				Expect(err).NotTo(HaveOccurred())
-				fd4.Close()
+					// parse flags to get bundle dir argument so we can open stdin/out/err pipes
+					dadooFlags.Parse(cmd.Args[1:])
+					processDir := dadooFlags.Arg(2)
+					_, so, se, winsz, exit := openPipes(processDir)
 
-				// return exit status of runc on fd3
-				_, err = fd3.Write([]byte{runcReturns})
-				Expect(err).NotTo(HaveOccurred())
-				fd3.Close()
+					fmt.Println("B")
+					go recvWinSz(winsz)
 
-				// write exit code of actual process to $procesdir/exitcode file
-				if exitCode != nil {
-					Expect(ioutil.WriteFile(filepath.Join(processDir, "exitcode"), []byte(exitCode), 0600)).To(Succeed())
-				}
+					fmt.Println("C")
+					// write log file to fd4
+					_, err = io.Copy(fd4, bytes.NewReader([]byte(logs)))
+					Expect(err).NotTo(HaveOccurred())
+					fd4.Close()
 
-				<-closeExitPipeCh
-				Expect(exit.Close()).To(Succeed())
+					fmt.Println("D")
+					// return exit status of runc on fd3
+					_, err = fd3.Write([]byte{runcReturns})
+					Expect(err).NotTo(HaveOccurred())
+					fd3.Close()
 
-				// do some test IO (directly write to stdout and copy stdin->stderr)
-				so.WriteString("hello stdout")
-				_, err = io.Copy(se, si)
-				Expect(err).NotTo(HaveOccurred())
+					fmt.Println("E")
+					// write exit code of actual process to $procesdir/exitcode file
+					if exitCode != nil {
+						Expect(ioutil.WriteFile(filepath.Join(processDir, "exitcode"), []byte(exitCode), 0600)).To(Succeed())
+					}
 
-				se.WriteString("done copying stdin")
+					fmt.Println("F")
+					<-closeExitPipeCh
+					Expect(exit.Close()).To(Succeed())
 
-				Expect(so.Close()).To(Succeed())
-				Expect(se.Close()).To(Succeed())
-			}(cmd, dadooWritesExitCode, []byte(dadooWritesLogs), closeExitPipeCh, receiveWinSize)
+					fmt.Println("G")
+					// do some test IO (directly write to stdout and copy stdin->stderr)
+					so.WriteString("hello stdout")
+
+					fmt.Println("H")
+					se.WriteString("done copying stdin")
+
+					fmt.Println("I")
+					Expect(so.Close()).To(Succeed())
+					Expect(se.Close()).To(Succeed())
+					fmt.Println("J")
+
+				}(cmd, dadooWritesExitCode, []byte(dadooWritesLogs), closeExitPipeCh, receiveWinSize)
+			} else {
+				close(testFinishedCh)
+			}
 
 			return dadooReturns
 		})
+	})
+
+	AfterEach(func() {
+		<-testFinishedCh
+		Expect(os.RemoveAll(bundlePath)).To(Succeed())
 	})
 
 	Describe("Run", func() {
@@ -192,6 +219,7 @@ var _ = Describe("Dadoo ExecRunner", func() {
 
 			runReturns := make(chan struct{})
 			go func(runner *dadoo.ExecRunner) {
+				defer GinkgoRecover()
 				runner.Run(log, &runrunc.PreparedSpec{Process: specs.Process{Args: []string{"Banana", "rama"}}}, processPath, "some-handle", nil, garden.ProcessIO{})
 				close(runReturns)
 			}(runner)
@@ -223,10 +251,14 @@ var _ = Describe("Dadoo ExecRunner", func() {
 
 		Context("when spawning dadoo fails", func() {
 			It("returns a nice error", func() {
+				fmt.Println("T1")
 				dadooReturns = errors.New("boom")
+				fmt.Println("T2")
 
 				_, err := runner.Run(log, &runrunc.PreparedSpec{Process: specs.Process{Args: []string{"Banana", "rama"}}}, processPath, "some-handle", nil, garden.ProcessIO{})
+				fmt.Println("T3")
 				Expect(err).To(MatchError(ContainSubstring("boom")))
+				fmt.Println("T4")
 			})
 		})
 
@@ -534,94 +566,109 @@ var _ = Describe("Dadoo ExecRunner", func() {
 			Expect(syscall.Mkfifo(filepath.Join(processPath, "some-process-id", "exit"), 0)).To(Succeed())
 		})
 
-		JustBeforeEach(func() {
-			go func() {
-				defer GinkgoRecover()
-
-				si, so, se, _, exit := openPipes(filepath.Join(processPath, "some-process-id"))
-
-				_, err := so.WriteString("potato")
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = se.WriteString("tomato")
-				Expect(err).NotTo(HaveOccurred())
-
-				exit.Close()
-
-				_, err = io.Copy(se, si)
-				Expect(err).NotTo(HaveOccurred())
-			}()
-		})
-
 		Context("when dadoo has already exited", func() {
-			It("does not hang", func() {
-				dadooWritesExitCode = []byte("42")
-
-				// attach once, exit pipe will be open so this will work
-				var err error
-				_, err = runner.Attach(log, "some-process-id", garden.ProcessIO{}, processPath)
+			It("returns the process", func() {
+				out := gbytes.NewBuffer()
+				process, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
+					Stdout: out,
+				}, processPath)
 				Expect(err).NotTo(HaveOccurred())
-
-				// attach again, this exit pipe already closed, should not block
-				var process garden.Process
-				attach := make(chan struct{})
-				go func(log lager.Logger, processPath string, runner *dadoo.ExecRunner) {
-					defer close(attach)
-
-					var err error
-					process, err = runner.Attach(log, "some-process-id", garden.ProcessIO{}, processPath)
-					Expect(err).NotTo(HaveOccurred())
-				}(log, processPath, runner)
-
-				Eventually(attach).Should(BeClosed())
-
-				wait := make(chan struct{})
-				go func() {
-					defer close(wait)
-
-					process.Wait()
-				}()
-
-				Eventually(wait, "5s").Should(BeClosed())
+				Expect(process).NotTo(BeNil())
 			})
 		})
 
-		It("reports the correct pid", func() {
-			process, err := runner.Attach(log, "some-process-id", garden.ProcessIO{}, processPath)
-			Expect(err).NotTo(HaveOccurred())
+		Context("when dadoo is running", func() {
 
-			Expect(process.ID()).To(Equal("some-process-id"))
-		})
+			var stdin, stdout, stderr, exit *os.File
 
-		It("reattaches to the stdout output", func() {
-			stdout := gbytes.NewBuffer()
-			_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
-				Stdout: stdout,
-			}, processPath)
-			Expect(err).NotTo(HaveOccurred())
+			JustBeforeEach(func() {
+				stdin, stdout, stderr, _, exit = openPipes(filepath.Join(processPath, "some-process-id"))
+			})
 
-			Eventually(stdout).Should(gbytes.Say("potato"))
-		})
+			Context("and the process doesn't immediately write to stdout or stderr", func() {
 
-		It("reattaches to the stderr output", func() {
-			stderr := gbytes.NewBuffer()
-			_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
-				Stderr: stderr,
-			}, processPath)
-			Expect(err).NotTo(HaveOccurred())
+				var outBuf, errBuf *gbytes.Buffer
 
-			Eventually(stderr).Should(gbytes.Say("tomato"))
-		})
+				JustBeforeEach(func() {
+					outBuf = gbytes.NewBuffer()
+					errBuf = gbytes.NewBuffer()
 
-		It("reattaches to the stdin", func() {
-			stderr := gbytes.NewBuffer()
-			_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
-				Stderr: stderr,
-				Stdin:  strings.NewReader("hello stdin"),
-			}, processPath)
-			Expect(err).NotTo(HaveOccurred())
+					_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
+						Stdout: outBuf,
+						Stderr: errBuf,
+					}, processPath)
+					Expect(err).NotTo(HaveOccurred())
+				})
 
-			Eventually(stderr).Should(gbytes.Say("hello stdin"))
+				It("waits for stdout", func() {
+					Consistently(outBuf.Contents()).Should(BeEmpty())
+
+					_, err := stdout.WriteString("some-text")
+					Expect(err).NotTo(HaveOccurred())
+
+					Eventually(outBuf).Should(gbytes.Say("some-text"))
+				})
+
+				It("waits for stderr", func() {
+					Consistently(errBuf.Contents()).Should(BeEmpty())
+
+					_, err := stderr.WriteString("some-text")
+					Expect(err).NotTo(HaveOccurred())
+
+					Eventually(errBuf).Should(gbytes.Say("some-text"))
+				})
+			})
+
+			Context("and the process is already writing to stdout and stderr", func() {
+				JustBeforeEach(func() {
+					_, err := stdout.WriteString("potato")
+					Expect(err).NotTo(HaveOccurred())
+
+					_, err = stderr.WriteString("tomato")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("reports the correct pid", func() {
+					process, err := runner.Attach(log, "some-process-id", garden.ProcessIO{}, processPath)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(process.ID()).To(Equal("some-process-id"))
+				})
+
+				It("reattaches to the stdout output", func() {
+					outBuf := gbytes.NewBuffer()
+					_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
+						Stdout: outBuf,
+					}, processPath)
+					Expect(err).NotTo(HaveOccurred())
+
+					Eventually(outBuf).Should(gbytes.Say("potato"))
+				})
+
+				It("reattaches to the stderr output", func() {
+					errBuf := gbytes.NewBuffer()
+					_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
+						Stderr: errBuf,
+					}, processPath)
+					Expect(err).NotTo(HaveOccurred())
+
+					Eventually(errBuf).Should(gbytes.Say("tomato"))
+				})
+
+				It("reattaches to the stdin", func() {
+					_, err := runner.Attach(log, "some-process-id", garden.ProcessIO{
+						Stdin: strings.NewReader("hello stdin"),
+					}, processPath)
+					Expect(err).NotTo(HaveOccurred())
+
+					stdinContents := gbytes.NewBuffer()
+					go func() {
+						io.Copy(stdinContents, stdin)
+					}()
+
+					Eventually(stdinContents).Should(gbytes.Say("hello stdin"))
+				})
+			})
 		})
 	})
 })
@@ -648,13 +695,15 @@ func dup(f *os.File) *os.File {
 }
 
 func openPipes(dir string) (stdin, stdout, stderr, winsz, exit *os.File) {
-	si, err := os.Open(filepath.Join(dir, "stdin"))
+	si, err := os.OpenFile(filepath.Join(dir, "stdin"), os.O_RDONLY|syscall.O_NONBLOCK, 0600)
 	Expect(err).NotTo(HaveOccurred())
 
-	so, err := os.OpenFile(filepath.Join(dir, "stdout"), os.O_APPEND|os.O_WRONLY, 0600)
+	Expect(syscall.SetNonblock(int(si.Fd()), false)).To(Succeed())
+
+	so, err := os.OpenFile(filepath.Join(dir, "stdout"), os.O_APPEND|os.O_RDWR, 0600)
 	Expect(err).NotTo(HaveOccurred())
 
-	se, err := os.OpenFile(filepath.Join(dir, "stderr"), os.O_APPEND|os.O_WRONLY, 0600)
+	se, err := os.OpenFile(filepath.Join(dir, "stderr"), os.O_APPEND|os.O_RDWR, 0600)
 	Expect(err).NotTo(HaveOccurred())
 
 	exit, err = os.OpenFile(filepath.Join(dir, "exit"), os.O_APPEND|os.O_RDWR, 0600)
