@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sync"
 	"time"
 
 	"code.cloudfoundry.org/garden"
@@ -241,7 +242,15 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 		return nil, err
 	}
 
-	if err = g.Networker.Network(log, spec, actualSpec.Pid); err != nil {
+	job := Job{
+		Logger:   log,
+		Spec:     spec,
+		Pid:      actualSpec.Pid,
+		Work:     g.Networker.Network,
+		Finished: make(chan error),
+	}
+	Push(job)
+	if err = <-job.Finished; err != nil {
 		return nil, err
 	}
 
@@ -267,6 +276,45 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 	}
 
 	return container, nil
+}
+
+var mutex = &sync.Mutex{}
+var jobs = make(chan Job)
+
+type Job struct {
+	Logger   lager.Logger
+	Spec     garden.ContainerSpec
+	Pid      int
+	Work     func(lager.Logger, garden.ContainerSpec, int) error
+	Finished chan error
+}
+
+var started bool = false
+
+func Push(job Job) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	if !started {
+		Pool()
+	}
+	jobs <- job
+}
+
+func Pop() Job {
+	return <-jobs
+}
+
+func Pool() {
+	started = true
+	for i := 0; i < 16; i++ {
+		go func() {
+			for {
+				job := Pop()
+				err := job.Work(job.Logger, job.Spec, job.Pid)
+				job.Finished <- err
+			}
+		}()
+	}
 }
 
 func (g *Gardener) Lookup(handle string) (garden.Container, error) {
