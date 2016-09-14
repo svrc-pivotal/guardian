@@ -143,32 +143,43 @@ func (n *networker) Network(log lager.Logger, containerSpec garden.ContainerSpec
 	log.Info("started")
 	defer log.Info("finished")
 
+	parseStop := StartTimer("networker - n.specParser.Parse", log)
 	subnetReq, ipReq, err := n.specParser.Parse(log, containerSpec.Network)
 	if err != nil {
 		log.Error("parse-failed", err)
 		return err
 	}
+	parseStop()
 
+	acquireStop := StartTimer("networker - n.subnetPool.Acquire", log)
 	subnet, ip, err := n.subnetPool.Acquire(log, subnetReq, ipReq)
 	if err != nil {
 		log.Error("acquire-failed", err)
 		return err
 	}
+	acquireStop()
 
+	createStop := StartTimer("networker - n.configCreator.Create", log)
 	config, err := n.configCreator.Create(log, containerSpec.Handle, subnet, ip)
 	if err != nil {
 		log.Error("create-config-failed", err)
 		return fmt.Errorf("create network config: %s", err)
 	}
+	createStop()
 	log.Info("config-create", lager.Data{"config": config})
 
+	saveStop := StartTimer("networker - save", log)
 	if err := save(n.configStore, containerSpec.Handle, config); err != nil {
 		return err
 	}
+	saveStop()
 
+	applyStop := StartTimer("networker - n.configurer.Apply", log)
 	if err := n.configurer.Apply(log, config, pid); err != nil {
 		return err
 	}
+	applyStop()
+
 	return nil
 }
 

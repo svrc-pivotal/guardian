@@ -5,6 +5,7 @@ import (
 	"net"
 	"os/exec"
 
+	"code.cloudfoundry.org/guardian/kawasaki"
 	"code.cloudfoundry.org/lager"
 )
 
@@ -21,15 +22,19 @@ func NewInstanceChainCreator(iptables *IPTablesController) *InstanceChainCreator
 func (cc *InstanceChainCreator) Create(logger lager.Logger, handle, instanceId, bridgeName string, ip net.IP, network *net.IPNet) error {
 	instanceChain := cc.iptables.InstanceChain(instanceId)
 
+	createNatChainStop := kawasaki.StartTimer("instanceChainCreator - cc.iptables.CreateChain nat", logger)
 	if err := cc.iptables.CreateChain("nat", instanceChain); err != nil {
 		return err
 	}
+	createNatChainStop()
 
 	// Bind nat instance chain to nat prerouting chain
 	cmd := exec.Command(cc.iptables.binPath, "--wait", "--table", "nat", "-A", cc.iptables.preroutingChain, "--jump", instanceChain)
+	bindInstanceChainStop := kawasaki.StartTimer(fmt.Sprintf("instanceChainCreator - cc.iptables.run %#v", cmd.Args), logger)
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
+	bindInstanceChainStop()
 
 	// Enable NAT for traffic coming from containers
 	cmd = exec.Command("sh", "-c", fmt.Sprintf(
@@ -37,26 +42,34 @@ func (cc *InstanceChainCreator) Create(logger lager.Logger, handle, instanceId, 
 		cc.iptables.binPath, cc.iptables.postroutingChain, network.String(), cc.iptables.binPath, cc.iptables.postroutingChain,
 		network.String(), network.String(),
 	))
+	natStop := kawasaki.StartTimer(fmt.Sprintf("instanceChainCreator - cc.iptables.run %#v", cmd.Args), logger)
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
+	natStop()
 
 	// Create filter instance chain
+	createFilterChainStop := kawasaki.StartTimer("instanceChainCreator - cc.iptables.CreateChain filter", logger)
 	if err := cc.iptables.CreateChain("filter", instanceChain); err != nil {
 		return err
 	}
+	createFilterChainStop()
 
 	// Allow intra-subnet traffic (Linux ethernet bridging goes through ip stack)
 	cmd = exec.Command(cc.iptables.binPath, "--wait", "-A", instanceChain, "-s", network.String(), "-d", network.String(), "-j", "ACCEPT")
+	intraSubnetStop := kawasaki.StartTimer(fmt.Sprintf("instanceChainCreator - cc.iptables.run %#v", cmd.Args), logger)
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
+	intraSubnetStop()
 
 	// Otherwise, use the default filter chain
 	cmd = exec.Command(cc.iptables.binPath, "--wait", "-A", instanceChain, "--goto", cc.iptables.defaultChain)
+	defaultFilterStop := kawasaki.StartTimer(fmt.Sprintf("instanceChainCreator - cc.iptables.run %#v", cmd.Args), logger)
 	if err := cc.iptables.run("create-instance-chains", cmd); err != nil {
 		return err
 	}
+	defaultFilterStop()
 
 	// Bind filter instance chain to filter forward chain
 	cmd = exec.Command(cc.iptables.binPath, "--wait", "-I", cc.iptables.forwardChain, "2", "--in-interface", bridgeName, "--source", ip.String(), "--goto", instanceChain)
@@ -65,7 +78,11 @@ func (cc *InstanceChainCreator) Create(logger lager.Logger, handle, instanceId, 
 	}
 
 	// Create Logging Chain
-	return cc.createLoggingChain(logger, handle, instanceId)
+	createLoggingChainStop := kawasaki.StartTimer("instanceChainCreator - cc.iptables.CreateChain logging", logger)
+	err := cc.createLoggingChain(logger, handle, instanceId)
+	createLoggingChainStop()
+
+	return err
 }
 
 func (cc *InstanceChainCreator) createLoggingChain(logger lager.Logger, handle, instanceId string) error {

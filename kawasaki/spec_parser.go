@@ -11,6 +11,8 @@ import (
 type SpecParserFunc func(spec string) (subnets.SubnetSelector, subnets.IPSelector, error)
 
 func (fn SpecParserFunc) Parse(log lager.Logger, spec string) (subnets.SubnetSelector, subnets.IPSelector, error) {
+	stop := StartTimer("kawasaki/spec_parser.go - Parse", log)
+	defer stop()
 	return fn(spec)
 }
 

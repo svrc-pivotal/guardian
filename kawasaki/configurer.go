@@ -53,19 +53,29 @@ func NewConfigurer(resolvConfigurer DnsResolvConfigurer, hostConfigurer HostConf
 }
 
 func (c *configurer) Apply(log lager.Logger, cfg NetworkConfig, pid int) error {
+	dnsStop := StartTimer("configurer - c.dnsResolvConfigurer.Configure", log)
 	if err := c.dnsResolvConfigurer.Configure(log, cfg, pid); err != nil {
 		return err
 	}
+	dnsStop()
 
+	hostStop := StartTimer("configurer - c.hostConfigurer.Apply", log)
 	if err := c.hostConfigurer.Apply(log, cfg, pid); err != nil {
 		return err
 	}
+	hostStop()
 
+	instanceChainStop := StartTimer("configurer - c.instanceChainCreator.Create", log)
 	if err := c.instanceChainCreator.Create(log, cfg.ContainerHandle, cfg.IPTableInstance, cfg.BridgeName, cfg.ContainerIP, cfg.Subnet); err != nil {
 		return err
 	}
+	instanceChainStop()
 
-	return c.containerConfigurer.Apply(log, cfg, pid)
+	containerConfigurerStop := StartTimer("configurer - c.containerConfigurer.Apply", log)
+	err := c.containerConfigurer.Apply(log, cfg, pid)
+	containerConfigurerStop()
+
+	return err
 }
 
 func (c *configurer) DestroyBridge(log lager.Logger, cfg NetworkConfig) error {

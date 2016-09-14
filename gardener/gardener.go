@@ -29,6 +29,8 @@ const GraceTimeKey = "garden.grace-time"
 
 const RawRootFSScheme = "raw"
 
+var netmutex = &sync.Mutex{}
+
 type SysInfoProvider interface {
 	TotalMemory() (uint64, error)
 	TotalDisk() (uint64, error)
@@ -172,17 +174,21 @@ type Gardener struct {
 // Create creates a container by combining the results of networker.Network,
 // volumizer.Create and containzer.Create.
 func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err error) {
+	log := g.Logger.Session("create", lager.Data{"handle": spec.Handle})
+	log.Info("start")
+
+	dupHandleCheckStop := StartTimer("ggg.gardener - g.checkDuplicateHandle", log)
 	if err := g.checkDuplicateHandle(spec.Handle); err != nil {
 		return nil, err
 	}
+	dupHandleCheckStop()
 
+	UidGenerateStop := StartTimer("ggg.gardener - g.UidGenerator.Generate", log)
 	if spec.Handle == "" {
 		spec.Handle = g.UidGenerator.Generate()
 	}
+	UidGenerateStop()
 
-	log := g.Logger.Session("create", lager.Data{"handle": spec.Handle})
-
-	log.Info("start")
 	defer func() {
 		if err != nil {
 			log := log.Session("create-failed-cleaningup", lager.Data{
@@ -214,17 +220,20 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 		rootFSPath = rootFSURL.Path
 	} else {
 		var err error
+		volumeCreateStop := StartTimer("ggg.gardener - g.VolumeCreator.Create", log)
 		rootFSPath, env, err = g.VolumeCreator.Create(log, spec.Handle, rootfs_provider.Spec{
 			RootFS:     rootFSURL,
 			QuotaSize:  int64(spec.Limits.Disk.ByteHard),
 			QuotaScope: spec.Limits.Disk.Scope,
 			Namespaced: !spec.Privileged,
 		})
+		volumeCreateStop()
 		if err != nil {
 			return nil, err
 		}
 	}
 
+	containerizerCreateStop := StartTimer("ggg.gardener - g.Containerizer.Create", log)
 	if err := g.Containerizer.Create(log, DesiredContainerSpec{
 		Handle:     spec.Handle,
 		RootFSPath: rootFSPath,
@@ -236,35 +245,51 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 	}); err != nil {
 		return nil, err
 	}
+	containerizerCreateStop()
 
+	containerizerInfoStop := StartTimer("ggg.gardener - g.Containerizer.Info", log)
 	actualSpec, err := g.Containerizer.Info(log, spec.Handle)
 	if err != nil {
 		return nil, err
 	}
+	containerizerInfoStop()
 
-	job := Job{
-		Logger:   log,
-		Spec:     spec,
-		Pid:      actualSpec.Pid,
-		Work:     g.Networker.Network,
-		Finished: make(chan error),
-	}
-	Push(job)
-	if err = <-job.Finished; err != nil {
+	networkerStop := StartTimer("ggg.gardener - g.Networker.Network", log)
+	netmutex.Lock()
+	if err = g.Networker.Network(log, spec, actualSpec.Pid); err != nil {
 		return nil, err
 	}
+	netmutex.Unlock()
+	networkerStop()
 
+	// job := Job{
+	// 	Logger:   log,
+	// 	Spec:     spec,
+	// 	Pid:      actualSpec.Pid,
+	// 	Work:     g.Networker.Network,
+	// 	Finished: make(chan error),
+	// }
+	// Push(job)
+	// if err = <-job.Finished; err != nil {
+	// 	return nil, err
+	// }
+
+	lookupStop := StartTimer("ggg.gardener - g.Lookup", log)
 	container, err := g.Lookup(spec.Handle)
 	if err != nil {
 		return nil, err
 	}
+	lookupStop()
 
+	gtimeStop := StartTimer("ggg.gardener - container.SetGraceTime", log)
 	if spec.GraceTime != 0 {
 		if err := container.SetGraceTime(spec.GraceTime); err != nil {
 			return nil, err
 		}
 	}
+	gtimeStop()
 
+	propsStop := StartTimer("ggg.gardener - container.SetProperty", log)
 	for name, value := range spec.Properties {
 		if err := container.SetProperty(name, value); err != nil {
 			return nil, err
@@ -274,6 +299,7 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 	if err := container.SetProperty("garden.state", "created"); err != nil {
 		return nil, err
 	}
+	propsStop()
 
 	return container, nil
 }

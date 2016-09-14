@@ -44,6 +44,7 @@ import (
 	"code.cloudfoundry.org/guardian/sysinfo"
 	"code.cloudfoundry.org/guardian/volplugin"
 	"github.com/cloudfoundry/dropsonde"
+	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	"github.com/docker/docker/daemon/graphdriver"
 	_ "github.com/docker/docker/daemon/graphdriver/aufs"
@@ -409,7 +410,8 @@ func (cmd *GuardianCommand) wireNetworker(log lager.Logger, propManager kawasaki
 	interfacePrefix := fmt.Sprintf("w%s", cmd.Server.Tag)
 	chainPrefix := fmt.Sprintf("w-%s-", cmd.Server.Tag)
 	idGenerator := kawasaki.NewSequentialIDGenerator(time.Now().UnixNano())
-	iptRunner := &logging.Runner{CommandRunner: linux_command_runner.New(), Logger: log.Session("iptables-runner")}
+	fakeCommandRunner := fake_command_runner.New()
+	iptRunner := &logging.Runner{CommandRunner: fakeCommandRunner, Logger: log.Session("iptables-runner")}
 	ipTables := iptables.New(cmd.Bin.IPTables.Path(), iptRunner, chainPrefix)
 	ipTablesStarter := iptables.NewStarter(ipTables, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList)
 

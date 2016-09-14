@@ -52,28 +52,38 @@ func (c *Host) Apply(logger lager.Logger, config kawasaki.NetworkConfig, pid int
 
 	cLog.Debug("configuring")
 
+	configureBridgeIntfStop := kawasaki.StartTimer("hostConfigurer - c.configureBridgeIntf", logger)
 	if bridge, err = c.configureBridgeIntf(cLog, config.BridgeName, config.BridgeIP, config.Subnet); err != nil {
 		return err
 	}
+	configureBridgeIntfStop()
 
+	configureVethPairStop := kawasaki.StartTimer("hostConfigurer - c.configureVethPair", logger)
 	if host, container, err = c.configureVethPair(cLog, config.HostIntf, config.ContainerIntf); err != nil {
 		return err
 	}
+	configureVethPairStop()
 
+	configureHostIntfStop := kawasaki.StartTimer("hostConfigurer - c.configureHostIntf", logger)
 	if err = c.configureHostIntf(cLog, host, bridge, config.Mtu); err != nil {
 		return err
 	}
+	configureHostIntfStop()
 
+	netnsFileOpenerStop := kawasaki.StartTimer("hostConfigurer - c.FileOpener.Open", logger)
 	netns, err := c.FileOpener.Open(fmt.Sprintf("/proc/%d/ns/net", pid))
 	if err != nil {
 		return err
 	}
 	defer netns.Close()
+	netnsFileOpenerStop()
 
 	// move container end in to container
+	setNSStop := kawasaki.StartTimer("hostConfigurer - c.Link.SetNs", logger)
 	if err = c.Link.SetNs(container, int(netns.Fd())); err != nil {
 		return &SetNsFailedError{err, container, netns}
 	}
+	setNSStop()
 
 	return nil
 }
@@ -86,9 +96,13 @@ func (c *Host) configureBridgeIntf(log lager.Logger, name string, ip net.IP, sub
 	log = log.Session("bridge-interface")
 
 	log.Debug("find")
+	bridgeExistsStop := kawasaki.StartTimer("configureBridgeIntf - c.Link.InterfaceByName", log)
 	bridge, bridgeExists, err := c.Link.InterfaceByName(name)
+	bridgeExistsStop()
 	if err != nil || !bridgeExists {
+		bridgeCreateStop := kawasaki.StartTimer("configureBridgeIntf - c.Bridge.Create", log)
 		bridge, err = c.Bridge.Create(name, ip, subnet)
+		bridgeCreateStop()
 		if err != nil {
 			log.Error("create", err)
 			return nil, err
@@ -96,10 +110,12 @@ func (c *Host) configureBridgeIntf(log lager.Logger, name string, ip net.IP, sub
 	}
 
 	log.Debug("bring-up")
+	bridgeUpStop := kawasaki.StartTimer("configureBridgeIntf - c.Link.SetUp", log)
 	if err = c.Link.SetUp(bridge); err != nil {
 		log.Error("bring-up", err)
 		return nil, &LinkUpError{err, bridge, "bridge"}
 	}
+	bridgeUpStop()
 
 	return bridge, nil
 }
