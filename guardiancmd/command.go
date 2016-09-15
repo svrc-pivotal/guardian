@@ -213,17 +213,12 @@ func init() {
 		os.Exit(0)
 	}
 
-	maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
+	// maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
 	idMappings = rootfs_provider.MappingList{
 		{
 			ContainerID: 0,
-			HostID:      maxId,
+			HostID:      1000,
 			Size:        1,
-		},
-		{
-			ContainerID: 1,
-			HostID:      1,
-			Size:        maxId - 1,
 		},
 	}
 }
@@ -591,11 +586,11 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 		specs.Mount{Type: "proc", Source: "proc", Destination: "/proc", Options: []string{"nosuid", "noexec", "nodev"}},
 	)
 
-	rwm := "rwm"
-	character := "c"
-	var majorMinor = func(i int64) *int64 {
-		return &i
-	}
+	// rwm := "rwm"
+	// character := "c"
+	// var majorMinor = func(i int64) *int64 {
+	// 	return &i
+	// }
 
 	var worldReadWrite os.FileMode = 0666
 	fuseDevice := specs.Device{
@@ -606,17 +601,17 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 		FileMode: &worldReadWrite,
 	}
 
-	denyAll := specs.DeviceCgroup{Allow: false, Access: &rwm}
-	allowedDevices := []specs.DeviceCgroup{
-		{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(3), Allow: true},
-		{Access: &rwm, Type: &character, Major: majorMinor(5), Minor: majorMinor(0), Allow: true},
-		{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(8), Allow: true},
-		{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(9), Allow: true},
-		{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(5), Allow: true},
-		{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(7), Allow: true},
-		{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(7), Allow: true},
-		{Access: &rwm, Type: &character, Major: majorMinor(fuseDevice.Major), Minor: majorMinor(fuseDevice.Minor), Allow: true},
-	}
+	// denyAll := specs.DeviceCgroup{Allow: false, Access: &rwm}
+	// allowedDevices := []specs.DeviceCgroup{
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(3), Allow: true},
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(5), Minor: majorMinor(0), Allow: true},
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(8), Allow: true},
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(9), Allow: true},
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(5), Allow: true},
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(7), Allow: true},
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(1), Minor: majorMinor(7), Allow: true},
+	// 	{Access: &rwm, Type: &character, Major: majorMinor(fuseDevice.Major), Minor: majorMinor(fuseDevice.Minor), Allow: true},
+	// }
 
 	baseProcess := specs.Process{
 		Capabilities: UnprivilegedMaxCaps,
@@ -626,7 +621,7 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 
 	baseBundle := goci.Bundle().
 		WithNamespaces(PrivilegedContainerNamespaces...).
-		WithResources(&specs.Resources{Devices: append([]specs.DeviceCgroup{denyAll}, allowedDevices...)}).
+		// WithResources(&specs.Resources{Devices: append([]specs.DeviceCgroup{denyAll}, allowedDevices...)}).
 		WithRootFS(defaultRootFSPath).
 		WithDevices(fuseDevice).
 		WithProcess(baseProcess)

@@ -1,6 +1,7 @@
 package gqt_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -30,6 +31,16 @@ func TestGqt(t *testing.T) {
 
 	SynchronizedBeforeSuite(func() []byte {
 		var err error
+		// We need to have a non-root user from which to run runc
+		out, err := exec.Command("useradd", "ruthless").CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+		fmt.Printf("DEBUG: %s\n", out)
+
+		// The /run directory needs to be writable by our non-root user
+		out, err = exec.Command("chmod", "-R", "0777", "/run").CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+		fmt.Printf("DEBUG: %s\n", out)
+
 		bins := make(map[string]string)
 
 		bins["oci_runtime_path"] = os.Getenv("OCI_RUNTIME")
@@ -96,6 +107,10 @@ func TestGqt(t *testing.T) {
 		Expect(os.Chmod(initBin, 0755)).To(Succeed())
 		Expect(os.Chmod(path.Dir(initBin), 0755)).To(Succeed())
 		Expect(os.Chmod(path.Dir(path.Dir(initBin)), 0755)).To(Succeed())
+
+		Expect(os.Chmod(dadooBin, 0755)).To(Succeed())
+		Expect(os.Chmod(path.Dir(dadooBin), 0755)).To(Succeed())
+		Expect(os.Chmod(path.Dir(path.Dir(dadooBin)), 0755)).To(Succeed())
 	})
 
 	SetDefaultEventuallyTimeout(5 * time.Second)

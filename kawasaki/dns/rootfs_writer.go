@@ -17,6 +17,7 @@ type RootfsWriter struct{}
 
 func init() {
 	reexec.Register("chrootwrite", func() {
+
 		var rootfs, path string
 		var uid, gid int
 		flag.StringVar(&rootfs, "rootfs", "", "rootfs")

@@ -92,6 +92,7 @@ var _ = Describe("Creating a Container", func() {
 
 		JustBeforeEach(func() {
 			var err error
+
 			container, err = client.Create(garden.ContainerSpec{
 				Privileged: privileged,
 			})

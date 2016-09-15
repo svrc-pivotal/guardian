@@ -95,6 +95,14 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 		logw,
 	}
 
+	// HACK: run runc as non-root user
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: 1000,
+			Gid: 1000,
+		},
+	}
+
 	encodedSpec, err := json.Marshal(spec.Process)
 	if err != nil {
 		return nil, err // this could *almost* be a panic: a valid spec should always encode (but out of caution we'll error)
