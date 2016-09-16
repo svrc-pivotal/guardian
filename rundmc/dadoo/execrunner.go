@@ -1,7 +1,6 @@
 package dadoo
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,13 +57,37 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 		return nil, err
 	}
 
+	if err := os.Chown(processesPath, 1000, 1000); err != nil {
+		return nil, err
+	}
+
+	if err := os.Chown(processPath, 1000, 1000); err != nil {
+		return nil, err
+	}
+
 	fd3r, fd3w, err := os.Pipe()
 	if err != nil {
 		return nil, err
 	}
 
+	if err := fd3r.Chown(1000, 1000); err != nil {
+		return nil, err
+	}
+
+	if err := fd3w.Chown(1000, 1000); err != nil {
+		return nil, err
+	}
+
 	logr, logw, err := os.Pipe()
 	if err != nil {
+		return nil, err
+	}
+
+	if err := logr.Chown(1000, 1000); err != nil {
+		return nil, err
+	}
+
+	if err := logw.Chown(1000, 1000); err != nil {
 		return nil, err
 	}
 
@@ -108,15 +131,33 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 		return nil, err // this could *almost* be a panic: a valid spec should always encode (but out of caution we'll error)
 	}
 
-	cmd.Stdin = bytes.NewReader(encodedSpec)
+	processr, processw, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := processr.Chown(1000, 1000); err != nil {
+		return nil, err
+	}
+
+	if err := processw.Chown(1000, 1000); err != nil {
+		return nil, err
+	}
+
+	processw.Write(encodedSpec)
+
+	cmd.Stdin = processw
 	if err := d.commandRunner.Start(cmd); err != nil {
 		return nil, err
 	}
 
-	go d.commandRunner.Wait(cmd) // wait on spawned process to avoid zombies
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
+	go d.commandRunner.Wait(cmd) // wait on spawned process to avoid zombies
 	fd3w.Close()
 	logw.Close()
+	processr.Close()
 
 	stdin, stdout, stderr, err := process.openPipes(pio)
 	if err != nil {
@@ -207,7 +248,11 @@ func (p *process) ID() string {
 
 func (p *process) mkfifos() error {
 	for _, pipe := range []string{p.stdin, p.stdout, p.stderr, p.winsz, p.exit} {
-		if err := syscall.Mkfifo(pipe, 0); err != nil {
+		if err := syscall.Mkfifo(pipe, 0777); err != nil {
+			return err
+		}
+
+		if err := os.Chown(pipe, 1000, 1000); err != nil {
 			return err
 		}
 	}
