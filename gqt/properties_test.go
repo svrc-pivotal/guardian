@@ -4,6 +4,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
+	"time"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gardener"
@@ -24,8 +26,11 @@ var _ = Describe("Properties", func() {
 	BeforeEach(func() {
 		var err error
 		propertiesDir, err = ioutil.TempDir("", "props")
-		Expect(err).NotTo(HaveOccurred())
-		args = append(args, "--properties-path", path.Join(propertiesDir, "props.json"))
+		// poolDir, err := ioutil.TempDir("", "pool")
+		// Expect(err).NotTo(HaveOccurred())
+		// args = append(args, "--properties-path", path.Join(propertiesDir, "props.json"), "--destroy-containers-on-startup", "--port-pool-properties-path", path.Join(poolDir, "pool"))
+		// args = append(args, "--properties-path", path.Join(propertiesDir, "props.json"), "--port-pool-size", "2", "--destroy-containers-on-startup", "--port-pool-properties-path", path.Join(poolDir, "pool"))
+		args = append(args, "--properties-path", path.Join(propertiesDir, "props.json"), "--destroy-containers-on-startup")
 
 		client = startGarden(args...)
 		props = garden.Properties{"somename": "somevalue"}
@@ -39,6 +44,48 @@ var _ = Describe("Properties", func() {
 	AfterEach(func() {
 		Expect(client.DestroyAndStop()).To(Succeed())
 		Expect(os.RemoveAll(propertiesDir)).To(Succeed())
+	})
+
+	FIt("doesn't leak iptables rules over a restart, even if the depot dir doesn't exist", func() {
+		// Create a container (happens in BeforeEach)
+
+		// Add a couple of NetIns to the container
+		// Set hostPort = 0 to force garden to acquire a port for us
+		_, _, err := container.NetIn(0, 8080)
+		Expect(err).NotTo(HaveOccurred())
+		_, _, err = container.NetIn(0, 2222)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Stop the server (thus writing props.json to disk)
+		Expect(client.Stop()).To(Succeed())
+
+		// rm -rf bundle dir
+		// this simulates a partial/incomplete container destroy
+		// e.g. as may (or may not) happen during evacuation (???)
+		bundleDir := filepath.Join(client.DepotDir, container.Handle())
+		Expect(os.RemoveAll(bundleDir)).To(Succeed())
+
+		// Start garden server
+		// --destroy-containers-on-startup will now not find and destroy the partially cleaned up container
+		// because it won't see the container's bundle dir in the depot
+		// BUT networking/properties etc. for the container will still be hanging around ...
+		client = startGarden(args...)
+
+		// Create another container
+		container2, err := client.Create(garden.ContainerSpec{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// Add a couple of NetIns to the container
+		// Set hostPort = 0 to force garden to acquire a port for us
+		// Only this time .. it will probably re-assign the host port it assigned from before
+		// because we never cleaned it up properly
+		_, _, err = container2.NetIn(0, 8080)
+		Expect(err).NotTo(HaveOccurred())
+		_, _, err = container2.NetIn(0, 2222)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Check status of iptables on box to confirm suspicions
+		time.Sleep(time.Hour)
 	})
 
 	It("can get properties", func() {
