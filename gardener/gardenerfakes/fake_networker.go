@@ -58,11 +58,11 @@ type FakeNetworker struct {
 	netOutReturns struct {
 		result1 error
 	}
-	RestoreStub        func(log lager.Logger, handle string) error
+	RestoreStub        func(log lager.Logger, handle []string) error
 	restoreMutex       sync.RWMutex
 	restoreArgsForCall []struct {
 		log    lager.Logger
-		handle string
+		handle []string
 	}
 	restoreReturns struct {
 		result1 error
@@ -238,13 +238,18 @@ func (fake *FakeNetworker) NetOutReturns(result1 error) {
 	}{result1}
 }
 
-func (fake *FakeNetworker) Restore(log lager.Logger, handle string) error {
+func (fake *FakeNetworker) Restore(log lager.Logger, handle []string) error {
+	var handleCopy []string
+	if handle != nil {
+		handleCopy = make([]string, len(handle))
+		copy(handleCopy, handle)
+	}
 	fake.restoreMutex.Lock()
 	fake.restoreArgsForCall = append(fake.restoreArgsForCall, struct {
 		log    lager.Logger
-		handle string
-	}{log, handle})
-	fake.recordInvocation("Restore", []interface{}{log, handle})
+		handle []string
+	}{log, handleCopy})
+	fake.recordInvocation("Restore", []interface{}{log, handleCopy})
 	fake.restoreMutex.Unlock()
 	if fake.RestoreStub != nil {
 		return fake.RestoreStub(log, handle)
@@ -259,7 +264,7 @@ func (fake *FakeNetworker) RestoreCallCount() int {
 	return len(fake.restoreArgsForCall)
 }
 
-func (fake *FakeNetworker) RestoreArgsForCall(i int) (lager.Logger, string) {
+func (fake *FakeNetworker) RestoreArgsForCall(i int) (lager.Logger, []string) {
 	fake.restoreMutex.RLock()
 	defer fake.restoreMutex.RUnlock()
 	return fake.restoreArgsForCall[i].log, fake.restoreArgsForCall[i].handle

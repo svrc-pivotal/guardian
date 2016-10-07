@@ -125,7 +125,7 @@ func (p *externalBinaryNetworker) Destroy(log lager.Logger, handle string) error
 	return p.exec(log, "down", handle, nil, nil)
 }
 
-func (p *externalBinaryNetworker) Restore(log lager.Logger, handle string) error {
+func (p *externalBinaryNetworker) Restore(log lager.Logger, handle []string) error {
 	return nil
 }
 

@@ -32,6 +32,15 @@ type FakeInstanceChainCreator struct {
 	destroyReturns struct {
 		result1 error
 	}
+	ListStub        func(logger lager.Logger) ([]string, error)
+	listMutex       sync.RWMutex
+	listArgsForCall []struct {
+		logger lager.Logger
+	}
+	listReturns struct {
+		result1 []string
+		result2 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -108,6 +117,40 @@ func (fake *FakeInstanceChainCreator) DestroyReturns(result1 error) {
 	}{result1}
 }
 
+func (fake *FakeInstanceChainCreator) List(logger lager.Logger) ([]string, error) {
+	fake.listMutex.Lock()
+	fake.listArgsForCall = append(fake.listArgsForCall, struct {
+		logger lager.Logger
+	}{logger})
+	fake.recordInvocation("List", []interface{}{logger})
+	fake.listMutex.Unlock()
+	if fake.ListStub != nil {
+		return fake.ListStub(logger)
+	} else {
+		return fake.listReturns.result1, fake.listReturns.result2
+	}
+}
+
+func (fake *FakeInstanceChainCreator) ListCallCount() int {
+	fake.listMutex.RLock()
+	defer fake.listMutex.RUnlock()
+	return len(fake.listArgsForCall)
+}
+
+func (fake *FakeInstanceChainCreator) ListArgsForCall(i int) lager.Logger {
+	fake.listMutex.RLock()
+	defer fake.listMutex.RUnlock()
+	return fake.listArgsForCall[i].logger
+}
+
+func (fake *FakeInstanceChainCreator) ListReturns(result1 []string, result2 error) {
+	fake.ListStub = nil
+	fake.listReturns = struct {
+		result1 []string
+		result2 error
+	}{result1, result2}
+}
+
 func (fake *FakeInstanceChainCreator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -115,6 +158,8 @@ func (fake *FakeInstanceChainCreator) Invocations() map[string][][]interface{} {
 	defer fake.createMutex.RUnlock()
 	fake.destroyMutex.RLock()
 	defer fake.destroyMutex.RUnlock()
+	fake.listMutex.RLock()
+	defer fake.listMutex.RUnlock()
 	return fake.invocations
 }
 

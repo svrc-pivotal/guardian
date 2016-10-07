@@ -1,9 +1,11 @@
 package iptables
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os/exec"
+	"strings"
 
 	"code.cloudfoundry.org/lager"
 )
@@ -136,4 +138,16 @@ func (cc *InstanceChainCreator) Destroy(logger lager.Logger, instanceId string) 
 	cc.iptables.DeleteChain("filter", instanceLoggingChain)
 
 	return nil
+}
+
+func (cc *InstanceChainCreator) List(logger lager.Logger) ([]string, error) {
+	var buff bytes.Buffer
+	cmd := exec.Command("sh", "-c", fmt.Sprintf(`%s --wait --table filter -S | grep "^-N %s" | sed -e "s/-N //g"`, cc.iptables.binPath, cc.iptables.instanceChainPrefix))
+	cmd.Stdout = &buff
+
+	if err := cc.iptables.runner.Run(cmd); err != nil {
+		return []string{}, err
+	}
+
+	return strings.Split(buff.String(), "\n"), nil
 }

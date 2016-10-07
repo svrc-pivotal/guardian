@@ -37,6 +37,15 @@ type FakeConfigurer struct {
 	destroyIPTablesRulesReturns struct {
 		result1 error
 	}
+	ListInstanceChainsStub        func(log lager.Logger) ([]string, error)
+	listInstanceChainsMutex       sync.RWMutex
+	listInstanceChainsArgsForCall []struct {
+		log lager.Logger
+	}
+	listInstanceChainsReturns struct {
+		result1 []string
+		result2 error
+	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -144,6 +153,40 @@ func (fake *FakeConfigurer) DestroyIPTablesRulesReturns(result1 error) {
 	}{result1}
 }
 
+func (fake *FakeConfigurer) ListInstanceChains(log lager.Logger) ([]string, error) {
+	fake.listInstanceChainsMutex.Lock()
+	fake.listInstanceChainsArgsForCall = append(fake.listInstanceChainsArgsForCall, struct {
+		log lager.Logger
+	}{log})
+	fake.recordInvocation("ListInstanceChains", []interface{}{log})
+	fake.listInstanceChainsMutex.Unlock()
+	if fake.ListInstanceChainsStub != nil {
+		return fake.ListInstanceChainsStub(log)
+	} else {
+		return fake.listInstanceChainsReturns.result1, fake.listInstanceChainsReturns.result2
+	}
+}
+
+func (fake *FakeConfigurer) ListInstanceChainsCallCount() int {
+	fake.listInstanceChainsMutex.RLock()
+	defer fake.listInstanceChainsMutex.RUnlock()
+	return len(fake.listInstanceChainsArgsForCall)
+}
+
+func (fake *FakeConfigurer) ListInstanceChainsArgsForCall(i int) lager.Logger {
+	fake.listInstanceChainsMutex.RLock()
+	defer fake.listInstanceChainsMutex.RUnlock()
+	return fake.listInstanceChainsArgsForCall[i].log
+}
+
+func (fake *FakeConfigurer) ListInstanceChainsReturns(result1 []string, result2 error) {
+	fake.ListInstanceChainsStub = nil
+	fake.listInstanceChainsReturns = struct {
+		result1 []string
+		result2 error
+	}{result1, result2}
+}
+
 func (fake *FakeConfigurer) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -153,6 +196,8 @@ func (fake *FakeConfigurer) Invocations() map[string][][]interface{} {
 	defer fake.destroyBridgeMutex.RUnlock()
 	fake.destroyIPTablesRulesMutex.RLock()
 	defer fake.destroyIPTablesRulesMutex.RUnlock()
+	fake.listInstanceChainsMutex.RLock()
+	defer fake.listInstanceChainsMutex.RUnlock()
 	return fake.invocations
 }
 

@@ -46,6 +46,7 @@ type Configurer interface {
 	Apply(log lager.Logger, cfg NetworkConfig, pid int) error
 	DestroyBridge(log lager.Logger, cfg NetworkConfig) error
 	DestroyIPTablesRules(log lager.Logger, cfg NetworkConfig) error
+	ListInstanceChains(log lager.Logger) ([]string, error)
 }
 
 //go:generate counterfeiter . ConfigStore
@@ -91,7 +92,7 @@ type Networker interface {
 	Destroy(log lager.Logger, handle string) error
 	NetIn(log lager.Logger, handle string, externalPort, containerPort uint32) (uint32, uint32, error)
 	NetOut(log lager.Logger, handle string, rule garden.NetOutRule) error
-	Restore(log lager.Logger, handle string) error
+	Restore(log lager.Logger, handles []string) error
 }
 
 type networker struct {
@@ -259,35 +260,78 @@ func (n *networker) Destroy(log lager.Logger, handle string) error {
 	return err
 }
 
-func (n *networker) Restore(log lager.Logger, handle string) error {
-	networkConfig, err := load(n.configStore, handle)
-	if err != nil {
-		return fmt.Errorf("loading %s: %v", handle, err)
-	}
+func (n *networker) Restore(log lager.Logger, handles []string) error {
+	var knownInstanceChains []string
 
-	err = n.subnetPool.Remove(networkConfig.Subnet, networkConfig.ContainerIP)
-	if err != nil {
-		return fmt.Errorf("subnet pool removing %s: %v", handle, err)
-	}
-
-	currentMappingsJson, ok := n.configStore.Get(handle, gardener.MappedPortsKey)
-	if !ok {
-		return nil
-	}
-
-	currentMappings, err := portsFromJson(currentMappingsJson)
-	if err != nil {
-		return fmt.Errorf("unmarshaling port mappings %s: %v", handle, err)
-	}
-
-	for _, mapping := range currentMappings {
-		if err = n.portPool.Remove(mapping.HostPort); err != nil {
-			return fmt.Errorf("port pool removing %s: %v", handle, err)
+	for _, handle := range handles {
+		networkConfig, err := load(n.configStore, handle)
+		if err != nil {
+			// Don't worry about it for now
+			continue
 		}
+
+		err = n.subnetPool.Remove(networkConfig.Subnet, networkConfig.ContainerIP)
+		if err != nil {
+			return fmt.Errorf("subnet pool removing %s: %v", handle, err)
+		}
+
+		currentMappingsJson, ok := n.configStore.Get(handle, gardener.MappedPortsKey)
+		if !ok {
+			return nil
+		}
+
+		currentMappings, err := portsFromJson(currentMappingsJson)
+		if err != nil {
+			return fmt.Errorf("unmarshaling port mappings %s: %v", handle, err)
+		}
+
+		for _, mapping := range currentMappings {
+			if err = n.portPool.Remove(mapping.HostPort); err != nil {
+				return fmt.Errorf("port pool removing %s: %v", handle, err)
+			}
+		}
+
+		knownChain := fmt.Sprintf("%s%s", networkConfig.IPTablePrefix, networkConfig.IPTableInstance)
+		knownInstanceChains = append(knownInstanceChains, knownChain)
 	}
 
-	return nil
+	// Tidy up the leftover
+	// Get a list of all iptableChains, subtract knownChains, destroy the rest!
+	log.Info(fmt.Sprintf("DEBUGGGGG - %s", knownInstanceChains))
+	existingChains, err := n.configurer.ListInstanceChains(log)
+	log.Info(fmt.Sprintf("DEBUGGGGG - %s", existingChains))
+	return err
 }
+
+// func (n *networker) Restore(log lager.Logger, handle string) error {
+// 	networkConfig, err := load(n.configStore, handle)
+// 	if err != nil {
+// 		return fmt.Errorf("loading %s: %v", handle, err)
+// 	}
+
+// 	err = n.subnetPool.Remove(networkConfig.Subnet, networkConfig.ContainerIP)
+// 	if err != nil {
+// 		return fmt.Errorf("subnet pool removing %s: %v", handle, err)
+// 	}
+
+// 	currentMappingsJson, ok := n.configStore.Get(handle, gardener.MappedPortsKey)
+// 	if !ok {
+// 		return nil
+// 	}
+
+// 	currentMappings, err := portsFromJson(currentMappingsJson)
+// 	if err != nil {
+// 		return fmt.Errorf("unmarshaling port mappings %s: %v", handle, err)
+// 	}
+
+// 	for _, mapping := range currentMappings {
+// 		if err = n.portPool.Remove(mapping.HostPort); err != nil {
+// 			return fmt.Errorf("port pool removing %s: %v", handle, err)
+// 		}
+// 	}
+
+// 	return nil
+// }
 
 func AddPortMapping(logger lager.Logger, configStore ConfigStore, handle string, newMapping garden.PortMapping) error {
 	var currentMappings portMappingList

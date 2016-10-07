@@ -31,6 +31,7 @@ type HostConfigurer interface {
 type InstanceChainCreator interface {
 	Create(logger lager.Logger, handle, instanceChain, bridgeName string, ip net.IP, network *net.IPNet) error
 	Destroy(logger lager.Logger, instanceChain string) error
+	List(logger lager.Logger) ([]string, error)
 }
 
 //go:generate counterfeiter . ContainerConfigurer
@@ -74,4 +75,8 @@ func (c *configurer) DestroyBridge(log lager.Logger, cfg NetworkConfig) error {
 
 func (c *configurer) DestroyIPTablesRules(log lager.Logger, cfg NetworkConfig) error {
 	return c.instanceChainCreator.Destroy(log, cfg.IPTableInstance)
+}
+
+func (c *configurer) ListInstanceChains(log lager.Logger) ([]string, error) {
+	return c.instanceChainCreator.List(log)
 }

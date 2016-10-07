@@ -56,7 +56,7 @@ type Networker interface {
 	Destroy(log lager.Logger, handle string) error
 	NetIn(log lager.Logger, handle string, hostPort, containerPort uint32) (uint32, uint32, error)
 	NetOut(log lager.Logger, handle string, rule garden.NetOutRule) error
-	Restore(log lager.Logger, handle string) error
+	Restore(log lager.Logger, handle []string) error
 }
 
 type VolumeCreator interface {
@@ -471,6 +471,8 @@ func (g *Gardener) Start() error {
 		return err
 	}
 
+	// If noop - then nothing gets restored into memory
+	// If restorer - then all container props loaded into memory
 	for _, handle := range g.Restorer.Restore(log, handles) {
 		destroyLog := log.Session("clean-up-container", lager.Data{"handle": handle})
 		destroyLog.Info("start")
@@ -483,5 +485,8 @@ func (g *Gardener) Start() error {
 		destroyLog.Info("cleaned-up")
 	}
 
-	return nil
+	// At this point we need to look at all iptables chains that exist, subtract the ones we know about
+	// and destroy the remaining!
+
+	return g.Networker.Restore(log, handles)
 }
