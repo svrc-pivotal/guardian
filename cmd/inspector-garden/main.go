@@ -52,23 +52,39 @@ import "C"
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 )
 
 func main() {
-	pid := flag.Int("pid", -1, "garden pid process")
+	var pid int
+	flag.IntVar(&pid, "pid", 0, "PID of garden process (optional on BOSH-deployed infrastructure)")
 	flag.Parse()
 
-	if *pid == -1 {
-		flag.Usage()
-		os.Exit(1)
+	if pid == 0 {
+		// attempt to determine garden PID automatically
+		gardenPidFilePath := "/var/vcap/sys/run/garden/garden.pid"
+
+		gardenPidData, err := ioutil.ReadFile(gardenPidFilePath)
+		if err != nil {
+			fmt.Printf("Error reading garden PID from %s - Error: %s\n", gardenPidFilePath, err)
+			flag.Usage()
+			os.Exit(1)
+		}
+
+		numParsed, err := fmt.Sscanf(string(gardenPidData), "%d", &pid)
+		if err != nil || numParsed != 1 {
+			fmt.Printf("Error parsing PID to int - Error: %s\n", err)
+			flag.Usage()
+			os.Exit(1)
+		}
 	}
 
 	if isGraphPathVisible() {
 		executeUserProgram(flag.Args())
 	} else {
-		enterPidNamespace(*pid)
+		enterPidNamespace(pid)
 	}
 }
 
@@ -86,7 +102,7 @@ func executeUserProgram(args []string) {
 		program = args[0]
 	}
 
-	ps1 := "PS1=inspector-garden#"
+	ps1 := "PS1=inspector-garden# "
 	executeProgram(program, nil, append(os.Environ(), ps1))
 }
 
