@@ -9,12 +9,15 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gqt/runner"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
+	"github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Surviving Restarts", func() {
@@ -167,9 +170,49 @@ var _ = Describe("Surviving Restarts", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 			})
+
 		})
 
 		Context("when the destroy-containers-on-startup flag is not passed", func() {
+			FContext("when there are a lot of iptables rules", func() {
+				var chainName string
+
+				BeforeEach(func() {
+					chainName = "w--instance-test-chain"
+
+					cmd := exec.Command("iptables", "-w", "-N", chainName)
+					sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+					Expect(err).NotTo(HaveOccurred())
+					Eventually(sess).Should(gexec.Exit(0))
+
+					basePortNum := 5000
+					for j := 0; j < 4000; j++ {
+						portNumStr := strconv.FormatInt(int64(basePortNum+j), 10)
+
+						cmd := exec.Command(
+							"iptables", "-w", "-A", chainName, "-p", "tcp",
+							"--dport", portNumStr, "-m", "iprange",
+							"--dst-range", "10.10.38.8-10.10.38.8", "-m", "tcp",
+							"-j", "RETURN",
+						)
+						sess, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
+						Expect(err).NotTo(HaveOccurred())
+						Eventually(sess).Should(gexec.Exit(0))
+					}
+
+					time.Sleep(time.Hour)
+				})
+
+				AfterEach(func() {
+					// Expect(exec.Command("iptables", "-F", chainName).Run()).To(Succeed())
+					// Expect(exec.Command("iptables", "-X", chainName).Run()).To(Succeed())
+				})
+
+				It("should still restart cleanly and handle API operations", func() {
+					_, err := client.Create(containerSpec)
+					Expect(err).NotTo(HaveOccurred())
+				})
+			})
 			Describe("on th pre-existing VM", func() {
 				It("does not destroy the depot", func() {
 					Expect(filepath.Join(client.DepotDir, container.Handle())).To(BeADirectory())
