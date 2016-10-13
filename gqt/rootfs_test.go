@@ -396,6 +396,20 @@ var _ = Describe("Rootfs container create parameter", func() {
 				Expect(err).To(MatchError(ContainSubstring("external image manager create failed")))
 			})
 		})
+
+		Context("when the image plugin fails during destruction", func() {
+			It("provides a sensible error message", func() {
+				_, err := client.Create(garden.ContainerSpec{
+					RootFSPath: "docker:///cfgarden/empty#v0.1.0",
+					Handle:     "make-it-fail-on-destruction",
+					Privileged: false,
+				})
+				Expect(err).ToNot(HaveOccurred())
+
+				err = client.Destroy("make-it-fail-on-destruction")
+				Expect(err).To(MatchError(ContainSubstring("external image manager destroy failed")))
+			})
+		})
 	})
 
 	Context("when the modified timestamp of the rootfs top-level directory changes", func() {

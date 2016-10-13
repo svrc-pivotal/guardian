@@ -14,6 +14,8 @@ func main() {
 
 	if imageID == "make-it-fail" {
 		panic("image-plugin-exploded")
+	} else if imageID == "make-it-fail-on-destruction" && action == "delete" {
+		panic("image-plugin-exploded-on-destruction")
 	}
 
 	err := ioutil.WriteFile(filepath.Join(storePath, fmt.Sprintf("%s-args", action)), []byte(fmt.Sprintf("%s", os.Args)), 0777)
