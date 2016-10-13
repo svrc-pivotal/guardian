@@ -31,7 +31,7 @@ func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec root
 	log.Debug("start")
 	defer log.Debug("end")
 
-	args := []string{"--store", p.storePath, "create"}
+	args := []string{"create"}
 	if spec.QuotaSize != 0 {
 		args = append(args, "--disk-limit-size-bytes", strconv.FormatInt(spec.QuotaSize, 10))
 	}

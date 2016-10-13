@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 )
 
 func main() {
-	storePath := os.Args[2]
-	action := os.Args[3]
+	action := os.Args[2]
 	imageID := os.Args[len(os.Args)-1]
 
 	if imageID == "make-it-fail" {
@@ -18,8 +16,13 @@ func main() {
 		panic("image-plugin-exploded-on-destruction")
 	}
 
-	err := ioutil.WriteFile(filepath.Join(storePath, fmt.Sprintf("%s-args", action)), []byte(fmt.Sprintf("%s", os.Args)), 0777)
+	err := ioutil.WriteFile(imageID, []byte(fmt.Sprintf("%s", os.Args)), 0777)
 	if err != nil {
+		panic(err)
+	}
+
+	storePath := fmt.Sprintf("/tmp/store-path/%s", imageID)
+	if err := os.MkdirAll(storePath, 0777); err != nil {
 		panic(err)
 	}
 

@@ -61,21 +61,12 @@ var _ = Describe("ExternalImageManager", func() {
 		})
 
 		Describe("external-image-manager parameters", func() {
-			It("sets the correct external-image-manager store path", func() {
-				Expect(err).ToNot(HaveOccurred())
-				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
-				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
-
-				Expect(imageManagerCmd.Args[1]).To(Equal("--store"))
-				Expect(imageManagerCmd.Args[2]).To(Equal("/var/vcap/data/external-image-manager"))
-			})
-
 			It("uses the correct external-image-manager create command", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
-				Expect(imageManagerCmd.Args[3]).To(Equal("create"))
+				Expect(imageManagerCmd.Args[1]).To(Equal("create"))
 			})
 
 			It("sets the correct image input to external-image-manager", func() {
@@ -104,8 +95,8 @@ var _ = Describe("ExternalImageManager", func() {
 					Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 					imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
-					Expect(imageManagerCmd.Args[4]).To(Equal("--disk-limit-size-bytes"))
-					Expect(imageManagerCmd.Args[5]).To(Equal(strconv.FormatInt(testQuotaSize, 10)))
+					Expect(imageManagerCmd.Args[2]).To(Equal("--disk-limit-size-bytes"))
+					Expect(imageManagerCmd.Args[3]).To(Equal(strconv.FormatInt(testQuotaSize, 10)))
 				})
 			})
 		})

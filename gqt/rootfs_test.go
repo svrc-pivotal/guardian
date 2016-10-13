@@ -305,36 +305,39 @@ var _ = Describe("Rootfs container create parameter", func() {
 	})
 
 	Context("when an image plugin path is provided at startup", func() {
+		var imageID string
+
 		BeforeEach(func() {
 			args = append(args, "--image-plugin", testImagePluginBin)
 		})
 
 		Context("and a non-quotaed container is created", func() {
+
 			JustBeforeEach(func() {
+				imageID = fmt.Sprintf("non-quotaed-container-%d", GinkgoParallelNode())
+
 				_, err := client.Create(garden.ContainerSpec{
 					RootFSPath: "docker:///cfgarden/empty#v0.1.0",
-					Handle:     "non-quotaed-container",
+					Handle:     imageID,
 					Privileged: false,
 				})
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			AfterEach(func() {
-				Expect(os.Remove(filepath.Join(client.GraphPath, "create-args"))).To(Succeed())
+				Expect(os.RemoveAll("/tmp/store-path")).To(Succeed())
 			})
 
-			It("executes the plugin, passing only the simplest set of args", func() {
-				args, err := ioutil.ReadFile(filepath.Join(client.GraphPath, "create-args"))
+			FIt("executes the plugin, passing only the simplest set of args", func() {
+				args, err := ioutil.ReadFile(imageID)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(args)).To(Equal(
-					fmt.Sprintf("[%s --store %s create %s %s]",
+					fmt.Sprintf("[%s create %s %s]",
 						testImagePluginBin,
-						client.GraphPath,
 						"docker:///cfgarden/empty#v0.1.0",
-						"non-quotaed-container",
+						fmt.Sprintf("non-quotaed-container-%d", GinkgoParallelNode()),
 					),
 				))
-
 			})
 
 			Context("and that container is destroyed", func() {
