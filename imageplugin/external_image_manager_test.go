@@ -50,10 +50,10 @@ var _ = Describe("ExternalImageManager", func() {
 				QuotaSize: testQuotaSize,
 				RootFS:    imageSource,
 			})
-			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("uses the correct external-image-manager binary", func() {
+			Expect(err).ToNot(HaveOccurred())
 			Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 			imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -62,6 +62,7 @@ var _ = Describe("ExternalImageManager", func() {
 
 		Describe("external-image-manager parameters", func() {
 			It("sets the correct external-image-manager store path", func() {
+				Expect(err).ToNot(HaveOccurred())
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -70,6 +71,7 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("uses the correct external-image-manager create command", func() {
+				Expect(err).ToNot(HaveOccurred())
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -77,6 +79,7 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("sets the correct image input to external-image-manager", func() {
+				Expect(err).ToNot(HaveOccurred())
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -84,6 +87,7 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("sets the correct id to external-image-manager", func() {
+				Expect(err).ToNot(HaveOccurred())
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -96,6 +100,7 @@ var _ = Describe("ExternalImageManager", func() {
 				})
 
 				It("passes the quota to the external-image-manager", func() {
+					Expect(err).ToNot(HaveOccurred())
 					Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 					imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -117,12 +122,13 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("returns stdout as the rootfs location", func() {
+				Expect(err).ToNot(HaveOccurred())
 				Expect(returnedRootFS).To(Equal("/this-is/your-rootfs"))
 			})
 		})
 
 		Context("when the command fails", func() {
-			JustBeforeEach(func() {
+			BeforeEach(func() {
 				fakeCommandRunner.WhenRunning(fake_command_runner.CommandSpec{
 					Path: "/external-image-manager-bin",
 				}, func(cmd *exec.Cmd) error {
@@ -133,38 +139,34 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("returns an error", func() {
-				_, _, err := externalImageManager.Create(logger, "hello", rootfs_provider.Spec{
-					RootFS: imageSource,
-				})
 				Expect(err).To(MatchError(ContainSubstring("external image manager create failed")))
 				Expect(err).To(MatchError(ContainSubstring("external-image-manager failure")))
 			})
 
 			It("returns the external-image-manager error output in the error", func() {
-				externalImageManager.Create(logger, "hello", rootfs_provider.Spec{
-					RootFS: imageSource,
-				})
 				Expect(logger).To(gbytes.Say("btrfs doesn't like you"))
 			})
 		})
 	})
 
 	Describe("Destroy", func() {
-		It("uses the correct external-image-manager binary", func() {
-			err := externalImageManager.Destroy(logger, "hello")
-			Expect(err).ToNot(HaveOccurred())
+		var err error
 
+		JustBeforeEach(func() {
+			err = externalImageManager.Destroy(logger, "hello")
+		})
+
+		It("uses the correct external-image-manager binary", func() {
+			Expect(err).ToNot(HaveOccurred())
 			Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 			imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
 			Expect(imageManagerCmd.Path).To(Equal("/external-image-manager-bin"))
 		})
 
-		Context("external-image-manager parameters", func() {
+		Describe("external-image-manager parameters", func() {
 			It("sets the correct external-image-manager store path", func() {
-				err := externalImageManager.Destroy(logger, "hello")
 				Expect(err).ToNot(HaveOccurred())
-
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -173,9 +175,7 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("uses the correct external-image-manager delete command", func() {
-				err := externalImageManager.Destroy(logger, "hello")
 				Expect(err).ToNot(HaveOccurred())
-
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -183,9 +183,7 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("sets the correct id to external-image-manager", func() {
-				err := externalImageManager.Destroy(logger, "hello")
 				Expect(err).ToNot(HaveOccurred())
-
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
 
@@ -205,13 +203,11 @@ var _ = Describe("ExternalImageManager", func() {
 			})
 
 			It("returns an error", func() {
-				err := externalImageManager.Destroy(logger, "hello")
 				Expect(err).To(MatchError(ContainSubstring("external image manager destroy failed")))
 				Expect(err).To(MatchError(ContainSubstring("external-image-manager failure")))
 			})
 
 			It("returns the external-image-manager error output in the error", func() {
-				externalImageManager.Destroy(logger, "hello")
 				Expect(logger).To(gbytes.Say("btrfs doesn't like you"))
 			})
 		})
