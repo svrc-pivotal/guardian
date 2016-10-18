@@ -30,11 +30,31 @@ func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec root
 	defer log.Debug("end")
 
 	args := []string{"create"}
+
 	if spec.QuotaSize != 0 {
 		args = append(args, "--disk-limit-size-bytes", strconv.FormatInt(spec.QuotaSize, 10))
 	}
 
+	if spec.Namespaced {
+		args = append(args,
+			"--uid-mapping",
+			"0:1000:1",
+			// p.getMapping()[0],
+			"--uid-mapping",
+			"1:100000:65536",
+			// p.getMapping()[1],
+
+			"--gid-mapping",
+			"0:1000:1",
+			// p.getMapping()[0],
+			"--gid-mapping",
+			"1:100000:65536",
+			// p.getMapping()[1],
+		)
+	}
+
 	args = append(args, spec.RootFS.String(), handle)
+
 	cmd := exec.Command(p.binPath, args...)
 
 	errBuffer := bytes.NewBuffer([]byte{})
@@ -49,6 +69,18 @@ func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec root
 	}
 
 	return outBuffer.String(), []string{}, nil
+}
+
+func (p *ExternalImageManager) getMapping() []string {
+	mappings := []string{}
+	// id -u vcap
+	// https://golang.org/pkg/os/user
+	// map to container root 0:<vcap-uid>:1
+	// then get sub-mapping range from /etc/subuid 1:100000:65536
+	// i think :)
+	//
+
+	return mappings
 }
 
 func (p *ExternalImageManager) Destroy(log lager.Logger, handle string) error {

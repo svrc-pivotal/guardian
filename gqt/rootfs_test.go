@@ -13,6 +13,7 @@ import (
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gqt/runner"
+	"code.cloudfoundry.org/guardian/sysinfo"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -335,12 +336,18 @@ var _ = Describe("Rootfs container create parameter", func() {
 				Expect(os.RemoveAll(filepath.Join(storePath, imageID))).To(Succeed())
 			})
 
-			It("executes the plugin with the correct args", func() {
+			FIt("executes the plugin with the correct args", func() {
 				args, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-args-%s", imageID)))
 				Expect(err).ToNot(HaveOccurred())
+
+				maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
 				Expect(string(args)).To(Equal(
-					fmt.Sprintf("[%s create %s %s]",
+					fmt.Sprintf("[%s create %s %s %s %s %s %s %s %s %s %s]",
 						testImagePluginBin,
+						"--uid-mapping", fmt.Sprintf("0:%d:1", maxId),
+						"--uid-mapping", fmt.Sprintf("1:1:%d", maxId-1),
+						"--gid-mapping", fmt.Sprintf("0:%d:1", maxId),
+						"--gid-mapping", fmt.Sprintf("1:1:%d", maxId-1),
 						"docker:///cfgarden/empty#v0.1.0",
 						fmt.Sprintf("non-quotaed-container-%d", GinkgoParallelNode()),
 					),
@@ -375,7 +382,7 @@ var _ = Describe("Rootfs container create parameter", func() {
 				_, err := client.Create(garden.ContainerSpec{
 					RootFSPath: "docker:///cfgarden/empty#v0.1.0",
 					Handle:     imageID,
-					Privileged: false,
+					Privileged: true,
 					Limits: garden.Limits{
 						Disk: garden.DiskLimits{
 							ByteHard: 1 * 1024 * 1024,
