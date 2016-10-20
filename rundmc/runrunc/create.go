@@ -31,7 +31,14 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 	logFilePath := filepath.Join(bundlePath, "create.log")
 	pidFilePath := filepath.Join(bundlePath, "pidfile")
 
-	cmd := exec.Command(c.runcPath, "--debug", "--log", logFilePath, "create", "--no-new-keyring", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
+	ownAUFSPath, err2 := exec.Command("/bin/bash", "-c", fmt.Sprintf("cat %s | python -m json.tool | grep aufs | cut -d '\"' -f 4", filepath.Join(bundlePath, "config.json"))).CombinedOutput()
+	if err2 != nil {
+		return err2
+	}
+	layerID := filepath.Base(string(ownAUFSPath))
+	cmd := exec.Command("unshare", "-m", "/bin/bash", "--", "-c", "mount|grep aufs|grep -v \""+layerID[0:len(layerID)-1]+"\"|cut -d ' ' -f 3|xargs -I {} umount {};"+
+		c.runcPath+" --debug --log "+logFilePath+" create --no-new-keyring --bundle "+bundlePath+" --pid-file "+pidFilePath+" "+id)
+	//cmd := exec.Command(c.runcPath, "--debug", "--log", logFilePath, "create", "--no-new-keyring", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
 
 	log.Info("creating", lager.Data{
 		"runc":        c.runcPath,
