@@ -36,7 +36,7 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 		return err2
 	}
 	layerID := filepath.Base(string(ownAUFSPath))
-	cmd := exec.Command("unshare", "-m", "/bin/bash", "--", "-c", "mount|grep aufs|grep -v \""+layerID[0:len(layerID)-1]+"\"|cut -d ' ' -f 3|xargs -I {} umount {};"+
+	cmd := exec.Command("unshare", "-m", "/bin/bash", "--", "-c", "cat /proc/self/mounts|grep aufs|grep -v \""+layerID[0:len(layerID)-1]+"\"|cut -d ' ' -f 2|xargs -I {} umount {};"+
 		c.runcPath+" --debug --log "+logFilePath+" create --no-new-keyring --bundle "+bundlePath+" --pid-file "+pidFilePath+" "+id)
 	//cmd := exec.Command(c.runcPath, "--debug", "--log", logFilePath, "create", "--no-new-keyring", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
 
