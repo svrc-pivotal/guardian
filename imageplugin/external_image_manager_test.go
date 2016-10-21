@@ -128,6 +128,15 @@ var _ = Describe("ExternalImageManager", func() {
 						"--gid-mapping", secondMap,
 					}))
 				})
+
+				It("runs the external-image-manager as the container root user", func() {
+					Expect(err).ToNot(HaveOccurred())
+					Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
+					imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]
+
+					Expect(imageManagerCmd.SysProcAttr.Credential.Uid).To(Equal(idMappings[0].HostID))
+					Expect(imageManagerCmd.SysProcAttr.Credential.Gid).To(Equal(idMappings[0].HostID))
+				})
 			})
 
 			Context("when namespaced is false", func() {

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 func main() {
@@ -27,8 +29,24 @@ func main() {
 		panic(err)
 	}
 
+	whoamiPath := filepath.Join("/tmp/store-path", fmt.Sprintf("%s-whoami-%s", action, imageID))
+	uid, err := exec.Command("id", "-u").CombinedOutput()
+	if err != nil {
+		panic(err)
+	}
+
+	gid, err := exec.Command("id", "-g").CombinedOutput()
+	if err != nil {
+		panic(err)
+	}
+
+	err = ioutil.WriteFile(whoamiPath, []byte(fmt.Sprintf("%s - %s\n", strings.Trim(string(uid), "\n"), strings.Trim(string(gid), "\n"))), 0777)
+	if err != nil {
+		panic(err)
+	}
+
 	argsFilepath := filepath.Join("/tmp/store-path", fmt.Sprintf("%s-args-%s", action, imageID))
-	err := ioutil.WriteFile(argsFilepath, []byte(fmt.Sprintf("%s", os.Args)), 0777)
+	err = ioutil.WriteFile(argsFilepath, []byte(fmt.Sprintf("%s", os.Args)), 0777)
 	if err != nil {
 		panic(err)
 	}

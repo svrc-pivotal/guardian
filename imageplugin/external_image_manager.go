@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
@@ -62,6 +63,15 @@ func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec root
 	cmd.Stderr = errBuffer
 	outBuffer := bytes.NewBuffer([]byte{})
 	cmd.Stdout = outBuffer
+
+	if spec.Namespaced {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Credential: &syscall.Credential{
+				Uid: p.mappings[0].HostID,
+				Gid: p.mappings[0].HostID,
+			},
+		}
+	}
 
 	if err := p.commandRunner.Run(cmd); err != nil {
 		logData := lager.Data{"action": "create", "stderr": errBuffer.String(), "stdout": outBuffer.String()}

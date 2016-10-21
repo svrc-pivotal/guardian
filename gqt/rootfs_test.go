@@ -359,9 +359,22 @@ var _ = Describe("Rootfs container create parameter", func() {
 				))
 			})
 
+			It("executes the plugin as the container user", func() {
+				maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
+				whoamiOutput, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-whoami-%s", imageID)))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(string(whoamiOutput)).To(ContainSubstring(fmt.Sprintf("%d - %d", maxId, maxId)))
+			})
+
 			Context("when the container is privileged", func() {
 				BeforeEach(func() {
 					privileged = true
+				})
+
+				It("executes the plugin as the host root user", func() {
+					whoamiOutput, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-whoami-%s", imageID)))
+					Expect(err).ToNot(HaveOccurred())
+					Expect(string(whoamiOutput)).To(ContainSubstring(fmt.Sprintf("%d - %d", 0, 0)))
 				})
 
 				It("does not pass any mappings to the plugin", func() {
