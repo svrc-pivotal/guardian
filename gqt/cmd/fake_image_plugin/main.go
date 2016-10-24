@@ -19,17 +19,6 @@ func main() {
 		panic("image-plugin-exploded-on-destruction")
 	}
 
-	storePath := fmt.Sprintf("/tmp/store-path/%s", imageID)
-	if err := os.MkdirAll(storePath, 0777); err != nil {
-		panic(err)
-	}
-
-	rootFSPath := fmt.Sprintf("%s/rootfs", storePath)
-	if err := os.MkdirAll(rootFSPath, 0777); err != nil {
-		panic(err)
-	}
-
-	whoamiPath := filepath.Join("/tmp/store-path", fmt.Sprintf("%s-whoami-%s", action, imageID))
 	uid, err := exec.Command("id", "-u").CombinedOutput()
 	if err != nil {
 		panic(err)
@@ -40,16 +29,33 @@ func main() {
 		panic(err)
 	}
 
-	err = ioutil.WriteFile(whoamiPath, []byte(fmt.Sprintf("%s - %s\n", strings.Trim(string(uid), "\n"), strings.Trim(string(gid), "\n"))), 0777)
+	var imagePath string
+	if strings.TrimSpace(string(uid)) == "0" {
+		imagePath = fmt.Sprintf("/tmp/store-path/%s", imageID)
+	} else {
+		imagePath = fmt.Sprintf("/tmp/unpriv-store-path/%s", imageID)
+	}
+	if err := os.MkdirAll(imagePath, 0777); err != nil {
+		panic(err)
+	}
+
+	rootFSPath := fmt.Sprintf("%s/rootfs", imagePath)
+	if err := os.MkdirAll(rootFSPath, 0777); err != nil {
+		panic(err)
+	}
+
+	whoamiPath := filepath.Join("/tmp", fmt.Sprintf("%s-whoami-%s", action, imageID))
+
+	err = ioutil.WriteFile(whoamiPath, []byte(fmt.Sprintf("%s - %s\n", strings.TrimSpace(string(uid)), strings.TrimSpace(string(gid)))), 0777)
 	if err != nil {
 		panic(err)
 	}
 
-	argsFilepath := filepath.Join("/tmp/store-path", fmt.Sprintf("%s-args-%s", action, imageID))
+	argsFilepath := filepath.Join("/tmp", fmt.Sprintf("%s-args-%s", action, imageID))
 	err = ioutil.WriteFile(argsFilepath, []byte(fmt.Sprintf("%s", os.Args)), 0777)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf(storePath)
+	fmt.Printf(imagePath)
 }

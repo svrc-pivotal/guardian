@@ -259,7 +259,7 @@ var _ = Describe("ExternalImageManager", func() {
 				Expect(imageManagerCmd.Args[1]).To(Equal("delete"))
 			})
 
-			It("sets the correct id to external-image-manager", func() {
+			It("passes the correct rootfs to delete to external-image-manager", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(len(fakeCommandRunner.ExecutedCommands())).To(Equal(1))
 				imageManagerCmd := fakeCommandRunner.ExecutedCommands()[0]

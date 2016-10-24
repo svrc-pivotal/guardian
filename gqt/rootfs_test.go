@@ -305,7 +305,7 @@ var _ = Describe("Rootfs container create parameter", func() {
 		})
 	})
 
-	Context("when an image plugin path is provided at startup", func() {
+	FContext("when an image plugin path is provided at startup", func() {
 		var (
 			imageID    string
 			storePath  string
@@ -314,11 +314,12 @@ var _ = Describe("Rootfs container create parameter", func() {
 
 		BeforeEach(func() {
 			args = append(args, "--image-plugin", testImagePluginBin)
-			storePath = "/tmp/store-path" // we can't use ioutil.TempDir as the fake image plugin needs to know the directory
+			storePath = "/tmp/unpriv-store-path" // we can't use ioutil.TempDir as the fake image plugin needs to know the directory
 			privileged = false
 		})
 
 		AfterEach(func() {
+			// TODO: This must be racy?!
 			Expect(os.RemoveAll(storePath)).To(Succeed())
 		})
 
@@ -336,11 +337,13 @@ var _ = Describe("Rootfs container create parameter", func() {
 
 			AfterEach(func() {
 				Expect(os.RemoveAll(filepath.Join(storePath, imageID))).To(Succeed())
+				Expect(os.RemoveAll(filepath.Join("/tmp", fmt.Sprintf("create-args-%s", imageID)))).To(Succeed())
+				Expect(os.RemoveAll(filepath.Join("/tmp", fmt.Sprintf("create-whoami-%s", imageID)))).To(Succeed())
 			})
 
 			It("executes the plugin with the correct args", func() {
 				maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
-				args, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-args-%s", imageID)))
+				args, err := ioutil.ReadFile(filepath.Join("/tmp", fmt.Sprintf("create-args-%s", imageID)))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(args)).To(Equal(
 					fmt.Sprintf("[%s create %s %s %s %s %s %s %s %s %s %s]",
@@ -361,24 +364,25 @@ var _ = Describe("Rootfs container create parameter", func() {
 
 			It("executes the plugin as the container user", func() {
 				maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
-				whoamiOutput, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-whoami-%s", imageID)))
+				whoamiOutput, err := ioutil.ReadFile(filepath.Join("/tmp", fmt.Sprintf("create-whoami-%s", imageID)))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(whoamiOutput)).To(ContainSubstring(fmt.Sprintf("%d - %d", maxId, maxId)))
 			})
 
 			Context("when the container is privileged", func() {
 				BeforeEach(func() {
+					storePath = "/tmp/store-path" // we can't use ioutil.TempDir as the fake image plugin needs to know the directory
 					privileged = true
 				})
 
 				It("executes the plugin as the host root user", func() {
-					whoamiOutput, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-whoami-%s", imageID)))
+					whoamiOutput, err := ioutil.ReadFile(filepath.Join("/tmp", fmt.Sprintf("create-whoami-%s", imageID)))
 					Expect(err).ToNot(HaveOccurred())
 					Expect(string(whoamiOutput)).To(ContainSubstring(fmt.Sprintf("%d - %d", 0, 0)))
 				})
 
 				It("does not pass any mappings to the plugin", func() {
-					args, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-args-%s", imageID)))
+					args, err := ioutil.ReadFile(filepath.Join("/tmp", fmt.Sprintf("create-args-%s", imageID)))
 					Expect(err).ToNot(HaveOccurred())
 					Expect(string(args)).NotTo(ContainSubstring("--uid-mapping"))
 					Expect(string(args)).NotTo(ContainSubstring("--gid-mapping"))
@@ -391,16 +395,16 @@ var _ = Describe("Rootfs container create parameter", func() {
 				})
 
 				AfterEach(func() {
-					Expect(os.RemoveAll(filepath.Join(storePath, imageID))).To(Succeed())
+					Expect(os.RemoveAll(filepath.Join("/tmp", fmt.Sprintf("delete-args-%s", imageID)))).To(Succeed())
 				})
 
-				It("executes the plugin with the correct args", func() {
-					args, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("delete-args-%s", imageID)))
+				FIt("executes the plugin with the correct args", func() {
+					args, err := ioutil.ReadFile(filepath.Join("/tmp", fmt.Sprintf("delete-args-%s", imageID)))
 					Expect(err).ToNot(HaveOccurred())
 					Expect(string(args)).To(Equal(
 						fmt.Sprintf("[%s delete %s]",
 							testImagePluginBin,
-							imageID,
+							filepath.Join(storePath, imageID),
 						),
 					))
 				})
@@ -428,7 +432,7 @@ var _ = Describe("Rootfs container create parameter", func() {
 			})
 
 			It("passes the disk limit to the image plugin as an argument", func() {
-				args, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-args-%s", imageID)))
+				args, err := ioutil.ReadFile(filepath.Join("/tmp", fmt.Sprintf("create-args-%s", imageID)))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(args)).To(ContainSubstring("--disk-limit-size-bytes 1048576"))
 			})
@@ -484,7 +488,7 @@ var _ = Describe("Rootfs container create parameter", func() {
 			})
 
 			It("should pass the value of the --default-rootfs startup flag to the image plugin", func() {
-				args, err := ioutil.ReadFile(filepath.Join(storePath, fmt.Sprintf("create-args-%s", imageID)))
+				args, err := ioutil.ReadFile(filepath.Join("/tmp", fmt.Sprintf("create-args-%s", imageID)))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(string(args)).To(ContainSubstring(fakeRootFsDir))
 			})
