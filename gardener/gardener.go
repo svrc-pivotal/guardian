@@ -120,6 +120,9 @@ type ActualContainerSpec struct {
 	// The path to the container's bundle directory
 	BundlePath string
 
+	// The path to the container's rootfs
+	RootFSPath string
+
 	// Whether the container is stopped
 	Stopped bool
 
@@ -309,6 +312,11 @@ func (g *Gardener) Destroy(handle string) error {
 
 // destroy idempotently destroys any resources associated with the given handle
 func (g *Gardener) destroy(log lager.Logger, handle string) error {
+	actualContainerSpec, err := g.Containerizer.Info(log, handle)
+	if err != nil {
+		return err
+	}
+
 	if err := g.Containerizer.Destroy(g.Logger, handle); err != nil {
 		return err
 	}
