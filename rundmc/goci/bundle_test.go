@@ -168,6 +168,18 @@ var _ = Describe("Bundle", func() {
 		})
 	})
 
+	FDescribe("WithPIDLimit", func() {
+		var limit int64 = 10
+
+		BeforeEach(func() {
+			returnedBundle = initialBundle.WithPIDLimit(specs.Pids{Limit: &limit})
+		})
+
+		It("returns a bundle with the pid limit added to the runtime spec", func() {
+			Expect(returnedBundle.Resources().Pids.Limit).To(Equal(&limit))
+		})
+	})
+
 	Describe("WithNamespace", func() {
 		It("does not change any namespaces other than the one with the given type", func() {
 			colin := specs.Namespace{Type: "colin", Path: ""}

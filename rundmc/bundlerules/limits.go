@@ -10,8 +10,14 @@ type Limits struct {
 }
 
 func (l Limits) Apply(bndl goci.Bndl, spec gardener.DesiredContainerSpec) goci.Bndl {
-	limit := uint64(spec.Limits.Memory.LimitInBytes)
-	bndl = bndl.WithMemoryLimit(specs.Memory{Limit: &limit, Swap: &limit})
+	memlimit := uint64(spec.Limits.Memory.LimitInBytes)
+	bndl = bndl.WithMemoryLimit(specs.Memory{Limit: &memlimit, Swap: &memlimit})
+
 	shares := uint64(spec.Limits.CPU.LimitInShares)
-	return bndl.WithCPUShares(specs.CPU{Shares: &shares})
+	bndl = bndl.WithCPUShares(specs.CPU{Shares: &shares})
+
+	pidlimit := int64(spec.Limits.PID.Limit)
+	bndl = bndl.WithPIDLimit(specs.Pids{Limit: &pidlimit})
+
+	return bndl
 }

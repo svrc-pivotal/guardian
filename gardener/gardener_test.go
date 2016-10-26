@@ -334,6 +334,24 @@ var _ = Describe("Gardener", func() {
 			})
 		})
 
+		FContext("when a pid limit is provided", func() {
+			It("should pass the pid limit to the containerizer", func() {
+				pidLimit := garden.Limits{
+					PID: garden.PIDLimits{Limit: 1024},
+				}
+
+				_, err := gdnr.Create(garden.ContainerSpec{
+					Limits: pidLimit,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(containerizer.CreateCallCount()).To(Equal(1))
+
+				_, spec := containerizer.CreateArgsForCall(0)
+				Expect(spec.Limits.PID.Limit).To(Equal(pidLimit.PID.Limit))
+			})
+		})
+
 		Context("when environment variables are returned by the volume manager", func() {
 			It("passes them to the containerizer", func() {
 				volumeCreator.CreateStub = func(_ lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
