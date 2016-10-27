@@ -225,15 +225,23 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 		rootFSPath = rootFSURL.Path
 	} else {
 		// create ns
+		log.Error("1", nil)
 		unshareCmd := exec.Command("unshare", "-m", "sleep 999")
 		if err := unshareCmd.Start(); err != nil {
 			return nil, err
 		}
 		newnsPid := unshareCmd.Process.Pid
 
+		log.Error("2", nil)
 		os.MkdirAll("/tmp/ns", 0755)
 		ioutil.WriteFile(fmt.Sprintf("/tmp/ns/%s", spec.Handle), []byte{}, 0644)
 
+		log.Error("3", nil)
+		err = syscall.Mount("/tmp/ns", "/tmp/ns", "", syscall.MS_BIND, "")
+		if err != nil {
+			return nil, err
+		}
+		log.Error("4", nil)
 		err = syscall.Mount(fmt.Sprintf("/proc/%d/ns/mnt", newnsPid), fmt.Sprintf("/tmp/ns/%s", spec.Handle), "", syscall.MS_BIND, "")
 		if err != nil {
 			return nil, err

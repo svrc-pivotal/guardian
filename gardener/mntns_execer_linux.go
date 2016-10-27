@@ -7,6 +7,17 @@ import (
 	"syscall"
 )
 
+// SYS_SETNS syscall allows changing the namespace of the current process.
+var SYS_SETNS = map[string]uintptr{
+	"386":     346,
+	"amd64":   308,
+	"arm64":   268,
+	"arm":     375,
+	"ppc64":   350,
+	"ppc64le": 350,
+	"s390x":   339,
+}[runtime.GOARCH]
+
 type MountNsExecer struct{}
 
 func (e MountNsExecer) Exec(nsPath *os.File, cb func() error) error {
@@ -21,20 +32,19 @@ func Exec(fd *os.File, cb func() error) error {
 	if err != nil {
 		return err
 	}
-	defer originalNsFd.Close()
 
 	newns := fd.Fd()
-	if err := SetNs(newns); err != nil {
+	if err := Setns(newns); err != nil {
 		return fmt.Errorf("set netns: %s", err)
 	}
 
-	err := cb()
-	mustSetNs(originalNsFd) // if this happens we definitely can't recover
+	err = cb()
+	mustSetns(uintptr(originalNsFd)) // if this happens we definitely can't recover
 	return err
 }
 
-func mustSetNs(ns vishnetns.NsHandle) {
-	if err := vishnetns.Set(ns); err != nil {
+func mustSetns(ns uintptr) {
+	if err := Setns(ns); err != nil {
 		panic(err)
 	}
 }
@@ -54,5 +64,5 @@ func GetMntNsFd() (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	return NsHandle(fd), nil
+	return int(fd), nil
 }
