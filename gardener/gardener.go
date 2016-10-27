@@ -3,7 +3,11 @@ package gardener
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
+	"os"
+	"os/exec"
+	"syscall"
 	"time"
 
 	"code.cloudfoundry.org/garden"
@@ -220,13 +224,49 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 	if rootFSURL.Scheme == RawRootFSScheme {
 		rootFSPath = rootFSURL.Path
 	} else {
-		var err error
-		rootFSPath, env, err = g.VolumeCreator.Create(log, spec.Handle, rootfs_provider.Spec{
-			RootFS:     rootFSURL,
-			QuotaSize:  int64(spec.Limits.Disk.ByteHard),
-			QuotaScope: spec.Limits.Disk.Scope,
-			Namespaced: !spec.Privileged,
-		})
+		// create ns
+		unshareCmd := exec.Command("unshare", "-m", "sleep 999")
+		if err := unshareCmd.Start(); err != nil {
+			return nil, err
+		}
+		newnsPid := unshareCmd.Process.Pid
+
+		os.MkdirAll("/tmp/ns", 0755)
+		ioutil.WriteFile(fmt.Sprintf("/tmp/ns/%s", spec.Handle), []byte{}, 0644)
+
+		err = syscall.Mount(fmt.Sprintf("/proc/%d/ns/mnt", newnsPid), fmt.Sprintf("/tmp/ns/%s", spec.Handle), "", syscall.MS_BIND, "")
+		if err != nil {
+			return nil, err
+		}
+
+		var (
+			rootFSPath string
+			env        []string
+		)
+
+		createFunc := func() error {
+			var err error
+			rootFSPath, env, err = g.VolumeCreator.Create(log, spec.Handle, rootfs_provider.Spec{
+				RootFS:     rootFSURL,
+				QuotaSize:  int64(spec.Limits.Disk.ByteHard),
+				QuotaScope: spec.Limits.Disk.Scope,
+				Namespaced: !spec.Privileged,
+			})
+
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+
+		// exec above func in new ns
+		newns, err := os.OpenFile(fmt.Sprintf("/proc/%d/ns/mnt", newnsPid), syscall.O_RDONLY, 0644)
+		if err != nil {
+			return nil, err
+		}
+		unshareCmd.Process.Kill()
+		err = MountNsExecer{}.Exec(newns, createFunc)
+
 		if err != nil {
 			return nil, err
 		}

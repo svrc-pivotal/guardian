@@ -49,6 +49,11 @@ var _ = Describe("Creating a Container", func() {
 		Expect(client.DestroyAndStop()).To(Succeed())
 	})
 
+	FIt("works", func() {
+		_, err := client.Create(garden.ContainerSpec{Handle: "nstest"})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	Context("when creating fails", func() {
 		// cause Create to fail by specifying an invalid network CIDR address
 		var containerSpec = garden.ContainerSpec{
