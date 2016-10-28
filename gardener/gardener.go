@@ -1,12 +1,14 @@
 package gardener
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/url"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 
@@ -225,27 +227,40 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 		rootFSPath = rootFSURL.Path
 	} else {
 		// create ns
-		log.Error("1", nil)
-		unshareCmd := exec.Command("unshare", "-m", "sleep 999")
-		if err := unshareCmd.Start(); err != nil {
+		log.Error("1", errors.New("1"))
+		unshareCmd := exec.Command("unshare", "-m", "sleep", "999")
+		err := unshareCmd.Start()
+		if err != nil {
+			return nil, fmt.Errorf("UNABLE TO UNSHARE")
+		}
+
+		time.Sleep(time.Millisecond * 500)
+		newnsPidBytes, err := exec.Command("sh", "-c", "ps aux | grep sleep | grep -v grep | awk '{print $2}'").CombinedOutput()
+		if err != nil {
 			return nil, err
 		}
-		newnsPid := unshareCmd.Process.Pid
+		newnsPid := strings.TrimSpace(string(newnsPidBytes))
 
-		log.Error("2", nil)
+		log.Error("2", errors.New("2"))
 		os.MkdirAll("/tmp/ns", 0755)
 		ioutil.WriteFile(fmt.Sprintf("/tmp/ns/%s", spec.Handle), []byte{}, 0644)
 
-		log.Error("3", nil)
+		log.Error("3", errors.New("3"))
 		err = syscall.Mount("/tmp/ns", "/tmp/ns", "", syscall.MS_BIND, "")
 		if err != nil {
 			return nil, err
 		}
-		log.Error("4", nil)
-		err = syscall.Mount(fmt.Sprintf("/proc/%d/ns/mnt", newnsPid), fmt.Sprintf("/tmp/ns/%s", spec.Handle), "", syscall.MS_BIND, "")
-		if err != nil {
-			return nil, err
+
+		log.Error("4", errors.New("4"))
+		if _, err := os.Stat(fmt.Sprintf("/proc/%s/ns/mnt", newnsPid)); err == nil {
+			err = syscall.Mount(fmt.Sprintf("/proc/%s/ns/mnt", newnsPid), fmt.Sprintf("/tmp/ns/%s", spec.Handle), "", syscall.MS_BIND, "")
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			log.Error(fmt.Sprintf("/proc/%s/ns/mnt DOES NOT EXIST", newnsPid), err)
 		}
+		log.Error("6", errors.New("6"))
 
 		var (
 			rootFSPath string
@@ -268,12 +283,14 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 		}
 
 		// exec above func in new ns
-		newns, err := os.OpenFile(fmt.Sprintf("/proc/%d/ns/mnt", newnsPid), syscall.O_RDONLY, 0644)
+		newns, err := os.OpenFile(fmt.Sprintf("/proc/%s/ns/mnt", newnsPid), syscall.O_RDONLY, 0)
+		log.Error("7", fmt.Errorf("The newns = %#v", newns))
 		if err != nil {
 			return nil, err
 		}
-		unshareCmd.Process.Kill()
+
 		err = MountNsExecer{}.Exec(newns, createFunc)
+		unshareCmd.Process.Kill()
 
 		if err != nil {
 			return nil, err

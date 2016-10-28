@@ -52,8 +52,9 @@ func mustSetns(ns uintptr) {
 // Setns sets namespace using syscall. Note that this should be a method
 // in syscall but it has not been added.
 func Setns(ns uintptr) (err error) {
-	_, _, e1 := syscall.Syscall(SYS_SETNS, ns, syscall.CLONE_NEWNS, 0)
+	_, _, e1 := syscall.Syscall(uintptr(308), uintptr(ns), uintptr(syscall.CLONE_NEWNS), 0)
 	if e1 != 0 {
+		fmt.Printf("DEBUGGGGG DIDN'T WORK")
 		err = e1
 	}
 	return
