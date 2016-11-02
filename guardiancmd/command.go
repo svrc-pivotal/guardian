@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"code.cloudfoundry.org/lager"
@@ -158,6 +159,7 @@ type GuardianCommand struct {
 
 	Bin struct {
 		Dadoo       FileFlag `long:"dadoo-bin"     required:"true" description:"Path to the 'dadoo' binary."`
+		Undoo       FileFlag `long:"undoo-bin"     required:"true" description:"Path to the 'undoo' binary."`
 		NSTar       FileFlag `long:"nstar-bin"     required:"true" description:"Path to the 'nstar' binary."`
 		Tar         FileFlag `long:"tar-bin"       required:"true" description:"Path to the 'tar' binary."`
 		IPTables    FileFlag `long:"iptables-bin"  default:"/sbin/iptables" description:"path to the the iptables binary"`
@@ -292,7 +294,7 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 		SysInfoProvider: sysinfo.NewProvider(cmd.Containers.Dir.Path()),
 		Networker:       networker,
 		VolumeCreator:   volumeCreator,
-		Containerizer:   cmd.wireContainerizer(logger, cmd.Containers.Dir.Path(), cmd.Bin.Dadoo.Path(), cmd.Bin.Runc, cmd.Bin.NSTar.Path(), cmd.Bin.Tar.Path(), cmd.Containers.DefaultRootFSDir.Path(), cmd.Containers.ApparmorProfile, propManager),
+		Containerizer:   cmd.wireContainerizer(logger, cmd.Containers.Dir.Path(), cmd.Bin.Dadoo.Path(), cmd.Bin.Runc, cmd.Bin.Undoo.Path(), cmd.Bin.NSTar.Path(), cmd.Bin.Tar.Path(), cmd.Containers.DefaultRootFSDir.Path(), cmd.Containers.ApparmorProfile, propManager),
 		PropertyManager: propManager,
 		MaxContainers:   cmd.Limits.MaxContainers,
 		Restorer:        restorer,
@@ -344,6 +346,8 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 
 	portPoolState = portPool.RefreshState()
 	ports.SaveState(cmd.Network.PortPoolPropertiesPath, portPoolState)
+
+	debug.PrintStack()
 
 	return nil
 }
@@ -479,10 +483,10 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 			Logger:   logger.Session("backing-store-mgr"),
 		},
 		LoopMounter: &quotaed_aufs.Loop{
-			Retrier: retrier.New(retrier.ConstantBackoff(200, 500*time.Millisecond), nil),
+			Retrier: retrier.New(retrier.ConstantBackoff(20, 500*time.Millisecond), nil),
 			Logger:  logger.Session("loop-mounter"),
 		},
-		Retrier:  retrier.New(retrier.ConstantBackoff(200, 500*time.Millisecond), nil),
+		Retrier:  retrier.New(retrier.ConstantBackoff(20, 500*time.Millisecond), nil),
 		RootPath: graphRoot,
 		Logger:   logger.Session("quotaed-driver"),
 	}
@@ -566,7 +570,7 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 		ovenCleaner)
 }
 
-func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadooPath, runcPath, nstarPath, tarPath, defaultRootFSPath, appArmorProfile string, properties gardener.PropertyManager) *rundmc.Containerizer {
+func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadooPath, runcPath, undooPath, nstarPath, tarPath, defaultRootFSPath, appArmorProfile string, properties gardener.PropertyManager) *rundmc.Containerizer {
 	depot := depot.New(depotPath)
 
 	commandRunner := linux_command_runner.New()
@@ -587,6 +591,7 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 		goci.RuncBinary(runcPath),
 		dadooPath,
 		runcPath,
+		undooPath,
 		runrunc.NewExecPreparer(&goci.BndlLoader{}, runrunc.LookupFunc(runrunc.LookupUser), chrootMkdir, NonRootMaxCaps),
 		dadoo.NewExecRunner(
 			dadooPath,
