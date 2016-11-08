@@ -17,20 +17,20 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func New(binPath string, commandRunner command_runner.CommandRunner, defaultRootFS *url.URL, mappings []specs.IDMapping) *ExternalImageManager {
+func New(binPath string, commandRunner command_runner.CommandRunner, defaultBaseImage *url.URL, mappings []specs.IDMapping) *ExternalImageManager {
 	return &ExternalImageManager{
-		binPath:       binPath,
-		commandRunner: commandRunner,
-		defaultRootFS: defaultRootFS,
-		mappings:      mappings,
+		binPath:          binPath,
+		commandRunner:    commandRunner,
+		defaultBaseImage: defaultBaseImage,
+		mappings:         mappings,
 	}
 }
 
 type ExternalImageManager struct {
-	binPath       string
-	commandRunner command_runner.CommandRunner
-	defaultRootFS *url.URL
-	mappings      []specs.IDMapping
+	binPath          string
+	commandRunner    command_runner.CommandRunner
+	defaultBaseImage *url.URL
+	mappings         []specs.IDMapping
 }
 
 func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
@@ -51,7 +51,7 @@ func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec root
 	}
 
 	if spec.RootFS.String() == "" {
-		args = append(args, p.defaultRootFS.String())
+		args = append(args, p.defaultBaseImage.String())
 	} else {
 		args = append(args, spec.RootFS.String())
 	}
@@ -80,26 +80,22 @@ func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec root
 		return "", nil, fmt.Errorf("external image manager create failed: %s", err)
 	}
 
-	trimmedOut := strings.TrimSpace(outBuffer.String())
-	rootFS := fmt.Sprintf("%s/rootfs", trimmedOut)
-	return rootFS, []string{}, nil
+	imagePath := strings.TrimSpace(outBuffer.String())
+	rootFSPath := filepath.Join(imagePath, "rootfs")
+	return rootFSPath, []string{}, nil
 }
 
 func stringifyMapping(mapping specs.IDMapping) string {
 	return fmt.Sprintf("%d:%d:%d", mapping.ContainerID, mapping.HostID, mapping.Size)
 }
 
-func (p *ExternalImageManager) Destroy(log lager.Logger, handle, rootfs string) error {
+func (p *ExternalImageManager) Destroy(log lager.Logger, handle, rootFSPath string) error {
 	log = log.Session("image-plugin-destroy")
 	log.Debug("start")
 	defer log.Debug("end")
 
-	bundlePath := filepath.Dir(rootfs)
-	cmd := exec.Command(
-		p.binPath,
-		"delete",
-		bundlePath,
-	)
+	imagePath := filepath.Dir(rootFSPath)
+	cmd := exec.Command(p.binPath, "delete", imagePath)
 
 	errBuffer := bytes.NewBuffer([]byte{})
 	cmd.Stderr = errBuffer
