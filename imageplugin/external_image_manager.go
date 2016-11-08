@@ -2,8 +2,10 @@ package imageplugin
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -81,12 +83,35 @@ func (p *ExternalImageManager) Create(log lager.Logger, handle string, spec root
 	}
 
 	imagePath := strings.TrimSpace(outBuffer.String())
+	envVars, err := p.readEnvVars(imagePath)
+	if err != nil {
+		return "", nil, err
+	}
+
 	rootFSPath := filepath.Join(imagePath, "rootfs")
-	return rootFSPath, []string{}, nil
+	return rootFSPath, envVars, nil
 }
 
 func stringifyMapping(mapping specs.IDMapping) string {
 	return fmt.Sprintf("%d:%d:%d", mapping.ContainerID, mapping.HostID, mapping.Size)
+}
+
+func (p *ExternalImageManager) readEnvVars(imagePath string) ([]string, error) {
+	imageConfigFile, err := os.Open(filepath.Join(imagePath, "image.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+
+		return nil, fmt.Errorf("could not open image configuration: %s", err)
+	}
+
+	var imageConfig Image
+	if err := json.NewDecoder(imageConfigFile).Decode(&imageConfig); err != nil {
+		return nil, fmt.Errorf("parsing image config: %s", err)
+	}
+
+	return imageConfig.Config.Env, nil
 }
 
 func (p *ExternalImageManager) Destroy(log lager.Logger, handle, rootFSPath string) error {
