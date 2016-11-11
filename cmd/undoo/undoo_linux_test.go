@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/kr/logfmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -16,8 +17,7 @@ import (
 
 var _ = Describe("Undoo", func() {
 	var (
-		logFile, logDir       string
-		depotPath, mnt1, mnt2 string
+		logFile, logDir string
 	)
 
 	BeforeEach(func() {
@@ -68,22 +68,26 @@ var _ = Describe("Undoo", func() {
 			session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(session).Should(gexec.Exit(4))
-			Expect(lastLogLine(logFile)).To(ContainSubstring("executable file not found in $PATH"))
+
+			parsedLogLine := struct{ Msg string }{}
+			logfmt.Unmarshal([]byte(lastLogLine(logFile)), &parsedLogLine)
+			Expect(parsedLogLine.Msg).To(ContainSubstring("executable file not found in $PATH"))
 		})
 	})
 
 	Context("when the cmd to call return an error", func() {
-		It("executes the command and logs the error to the end of the log-file", func() {
+		It("ensures the cmd's error is the last line in the log file", func() {
 			cmd := exec.Command(undooBinPath, "-log-file", logFile, "mountsRoot", "keep-id", "/bin/bash", "-c", fmt.Sprintf("ls scoobydoo 2>>%s", logFile))
 			session, err := gexec.Start(cmd, GinkgoWriter, GinkgoWriter)
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(session).Should(gexec.Exit(2))
+
 			Expect(lastLogLine(logFile)).To(ContainSubstring("No such file or directory"))
 		})
 	})
 
 	Context("when there are mounts under depot path in the parent mount namespace", func() {
-		var tmpDir string
+		var tmpDir, depotPath, mntOverMnt1, mnt1, mnt2 string
 
 		BeforeEach(func() {
 			var err error
@@ -96,18 +100,23 @@ var _ = Describe("Undoo", func() {
 
 			mnt1 = filepath.Join(depotPath, "mnt1")
 			Expect(os.MkdirAll(mnt1, 0644)).To(Succeed())
-			syscall.Mount("tmpfs", mnt1, "tmpfs", 0, "")
+			Expect(syscall.Mount("tmpfs", mnt1, "tmpfs", 0, "")).To(Succeed())
+
+			mntOverMnt1 = filepath.Join(depotPath, "mntOverMnt1")
+			Expect(os.MkdirAll(mntOverMnt1, 0644)).To(Succeed())
+			Expect(syscall.Mount(mnt1, mntOverMnt1, "", syscall.MS_BIND, "")).To(Succeed())
 
 			mnt2 = filepath.Join(depotPath, "mnt2")
 			Expect(os.MkdirAll(mnt2, 0644)).To(Succeed())
-			syscall.Mount("tmpfs", mnt2, "tmpfs", 0, "")
+			Expect(syscall.Mount("tmpfs", mnt2, "tmpfs", 0, "")).To(Succeed())
 		})
 
 		AfterEach(func() {
-			syscall.Unmount(mnt1, 0)
-			syscall.Unmount(mnt2, 0)
-			syscall.Unmount(depotPath, 0)
-			os.RemoveAll(tmpDir)
+			Expect(syscall.Unmount(mntOverMnt1, 0)).To(Succeed())
+			Expect(syscall.Unmount(mnt1, 0)).To(Succeed())
+			Expect(syscall.Unmount(mnt2, 0)).To(Succeed())
+			Expect(syscall.Unmount(depotPath, 0)).To(Succeed())
+			Expect(os.RemoveAll(tmpDir)).To(Succeed())
 		})
 
 		It("unmounts all unneeded mounts from the child mount namespace", func() {

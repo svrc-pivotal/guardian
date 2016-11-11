@@ -1,7 +1,6 @@
 package runrunc
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -51,7 +50,7 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 	mountsRoot := filepath.Dir(filepath.Dir(layerPath))
 	layerToKeep := filepath.Base(layerPath)
 
-	cmd := exec.Command(c.undooPath, mountsRoot, layerToKeep, c.runcPath, "--debug", "--log", logFilePath, "create", "--no-new-keyring", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
+	cmd := exec.Command(c.undooPath, "-log-file", logFilePath, mountsRoot, layerToKeep, c.runcPath, "--debug", "--log", logFilePath, "create", "--no-new-keyring", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
 
 	log.Info("creating", lager.Data{
 		"runc":        c.runcPath,
@@ -60,9 +59,6 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 		"logPath":     logFilePath,
 		"pidFilePath": pidFilePath,
 	})
-
-	errBuffer := bytes.NewBuffer()
-	cmd.Stderr = errBuffer
 
 	err = c.commandRunner.Run(cmd)
 

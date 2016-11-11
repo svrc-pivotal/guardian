@@ -118,6 +118,6 @@ func writeLog(log string) {
 	defer logFile.Close()
 
 	logWriter := bufio.NewWriter(logFile)
-	logWriter.WriteString(log)
+	logWriter.WriteString(fmt.Sprintf("msg=%q\n", log))
 	logWriter.Flush()
 }

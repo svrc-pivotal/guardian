@@ -81,6 +81,18 @@ var _ = Describe("Creating a Container", func() {
 
 			Expect(ioutil.ReadDir(filepath.Join(client.GraphPath, "aufs", "mnt"))).To(HaveLen(len(prev)))
 		})
+
+		Context("because runc doesn't exist", func() {
+			BeforeEach(func() {
+				args = []string{"--runc-bin", "/tmp/does/not/exist"}
+			})
+
+			It("returns a sensible error", func() {
+
+				_, err := client.Create(garden.ContainerSpec{})
+				Expect(err).To(MatchError("no such file or directory"))
+			})
+		})
 	})
 
 	Context("after creating a container without a specified handle", func() {
@@ -100,7 +112,7 @@ var _ = Describe("Creating a Container", func() {
 			initProcPid = initProcessPID(container.Handle())
 		})
 
-		It("should create a depot subdirectory based on the container handle", func() {
+		FIt("should create a depot subdirectory based on the container handle", func() {
 			Expect(container.Handle()).NotTo(BeEmpty())
 			Expect(filepath.Join(client.DepotDir, container.Handle())).To(BeADirectory())
 			Expect(filepath.Join(client.DepotDir, container.Handle(), "config.json")).To(BeARegularFile())

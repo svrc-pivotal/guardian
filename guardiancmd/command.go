@@ -8,13 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime/debug"
 	"time"
 
 	"code.cloudfoundry.org/lager"
-
-	"github.com/nu7hatch/gouuid"
-	"github.com/opencontainers/runtime-spec/specs-go"
 
 	"code.cloudfoundry.org/garden-shed/distclient"
 	quotaed_aufs "code.cloudfoundry.org/garden-shed/docker_drivers/aufs"
@@ -54,6 +50,8 @@ import (
 	_ "github.com/docker/docker/pkg/chrootarchive" // allow reexec of docker-applyLayer
 	"github.com/docker/docker/pkg/reexec"
 	"github.com/eapache/go-resiliency/retrier"
+	"github.com/nu7hatch/gouuid"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pivotal-golang/clock"
 	"github.com/pivotal-golang/localip"
 	"github.com/tedsuo/ifrit"
@@ -346,8 +344,6 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 
 	portPoolState = portPool.RefreshState()
 	ports.SaveState(cmd.Network.PortPoolPropertiesPath, portPoolState)
-
-	debug.PrintStack()
 
 	return nil
 }
