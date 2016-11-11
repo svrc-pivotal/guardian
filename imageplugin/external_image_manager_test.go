@@ -27,24 +27,24 @@ var _ = Describe("ExternalImageManager", func() {
 		logger               *lagertest.TestLogger
 		externalImageManager *imageplugin.ExternalImageManager
 		baseImage            *url.URL
-		idMappings           []specs.IDMapping
+		idMappings           []specs.LinuxIDMapping
 		defaultBaseImage     *url.URL
 		fakeCmdRunnerStdout  string
 		fakeCmdRunnerStderr  string
 		fakeCmdRunnerErr     error
 	)
 
-	BeforeEach(func() {
+	JustBeforeEach(func() {
 		logger = lagertest.NewTestLogger("external-image-manager")
 		fakeCommandRunner = fake_command_runner.New()
 
-		idMappings = []specs.IDMapping{
-			specs.IDMapping{
+		idMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{
 				ContainerID: 0,
 				HostID:      100,
 				Size:        1,
 			},
-			specs.IDMapping{
+			specs.LinuxIDMapping{
 				ContainerID: 1,
 				HostID:      1,
 				Size:        99,
@@ -71,6 +71,12 @@ var _ = Describe("ExternalImageManager", func() {
 
 			return fakeCmdRunnerErr
 		})
+	})
+
+	AfterEach(func() {
+		fakeCmdRunnerStdout = ""
+		fakeCmdRunnerStderr = ""
+		fakeCmdRunnerErr = nil
 	})
 
 	Describe("Create", func() {
@@ -388,6 +394,42 @@ var _ = Describe("ExternalImageManager", func() {
 					logger, "hello", "/store/0/images/123/rootfs",
 				)).NotTo(Succeed())
 
+				Expect(logger).To(gbytes.Say("btrfs doesn't like you"))
+			})
+		})
+	})
+
+	Describe("GC", func() {
+		var imageManagerCmd *exec.Cmd
+
+		It("uses the correct external-image-manager binary", func() {
+			Expect(externalImageManager.GC(logger)).NotTo(HaveOccurred())
+			imageManagerCmd = fakeCommandRunner.ExecutedCommands()[0]
+			Expect(imageManagerCmd.Path).To(Equal("/external-image-manager-bin"))
+		})
+
+		It("calls external image clean command", func() {
+			Expect(externalImageManager.GC(logger)).NotTo(HaveOccurred())
+			imageManagerCmd = fakeCommandRunner.ExecutedCommands()[0]
+			Expect(imageManagerCmd.Args[1]).To(Equal("clean"))
+		})
+
+		Context("when the command fails", func() {
+			BeforeEach(func() {
+				fakeCmdRunnerStdout = "could not find drax"
+				fakeCmdRunnerStderr = "btrfs doesn't like you"
+				fakeCmdRunnerErr = errors.New("external-image-manager failure")
+			})
+
+			It("returns an error", func() {
+				err := externalImageManager.GC(logger)
+				Expect(err).To(MatchError(ContainSubstring("external image manager clean failed")))
+				Expect(err).To(MatchError(ContainSubstring("external-image-manager failure")))
+				Expect(err).To(MatchError(ContainSubstring("could not find drax")))
+			})
+
+			It("forwards the external-image-manager error output", func() {
+				externalImageManager.GC(logger)
 				Expect(logger).To(gbytes.Say("btrfs doesn't like you"))
 			})
 		})
