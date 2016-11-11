@@ -87,7 +87,7 @@ var _ = Describe("Undoo", func() {
 	})
 
 	Context("when there are mounts under depot path in the parent mount namespace", func() {
-		var tmpDir, depotPath, mntOverMnt1, mnt1, mnt2 string
+		var tmpDir, depotPath, mnt1, mnt2 string
 
 		BeforeEach(func() {
 			var err error
@@ -102,17 +102,12 @@ var _ = Describe("Undoo", func() {
 			Expect(os.MkdirAll(mnt1, 0644)).To(Succeed())
 			Expect(syscall.Mount("tmpfs", mnt1, "tmpfs", 0, "")).To(Succeed())
 
-			mntOverMnt1 = filepath.Join(depotPath, "mntOverMnt1")
-			Expect(os.MkdirAll(mntOverMnt1, 0644)).To(Succeed())
-			Expect(syscall.Mount(mnt1, mntOverMnt1, "", syscall.MS_BIND, "")).To(Succeed())
-
 			mnt2 = filepath.Join(depotPath, "mnt2")
 			Expect(os.MkdirAll(mnt2, 0644)).To(Succeed())
 			Expect(syscall.Mount("tmpfs", mnt2, "tmpfs", 0, "")).To(Succeed())
 		})
 
 		AfterEach(func() {
-			Expect(syscall.Unmount(mntOverMnt1, 0)).To(Succeed())
 			Expect(syscall.Unmount(mnt1, 0)).To(Succeed())
 			Expect(syscall.Unmount(mnt2, 0)).To(Succeed())
 			Expect(syscall.Unmount(depotPath, 0)).To(Succeed())

@@ -53,6 +53,9 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 	cmd := exec.Command(c.undooPath, "-log-file", logFilePath, mountsRoot, layerToKeep, c.runcPath, "--debug", "--log", logFilePath, "create", "--no-new-keyring", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
 
 	log.Info("creating", lager.Data{
+		"undooPath":   c.undooPath,
+		"mountsRoot":  mountsRoot,
+		"layerToKeep": layerToKeep,
 		"runc":        c.runcPath,
 		"bundlePath":  bundlePath,
 		"id":          id,

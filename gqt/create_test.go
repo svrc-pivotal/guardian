@@ -88,9 +88,8 @@ var _ = Describe("Creating a Container", func() {
 			})
 
 			It("returns a sensible error", func() {
-
 				_, err := client.Create(garden.ContainerSpec{})
-				Expect(err).To(MatchError("no such file or directory"))
+				Expect(err.Error()).To(ContainSubstring("no such file or directory"))
 			})
 		})
 	})
@@ -112,7 +111,7 @@ var _ = Describe("Creating a Container", func() {
 			initProcPid = initProcessPID(container.Handle())
 		})
 
-		FIt("should create a depot subdirectory based on the container handle", func() {
+		It("should create a depot subdirectory based on the container handle", func() {
 			Expect(container.Handle()).NotTo(BeEmpty())
 			Expect(filepath.Join(client.DepotDir, container.Handle())).To(BeADirectory())
 			Expect(filepath.Join(client.DepotDir, container.Handle(), "config.json")).To(BeARegularFile())

@@ -47,14 +47,14 @@ func namespaced() {
 	flag.Parse()
 
 	if err := unmount(flag.Args()[0], flag.Args()[1]); err != nil {
-		writeLog(fmt.Sprintf("undoo-umount-failed: %s: mountsRoot %s, layerToKeep %s", err, flag.Args()[1], flag.Args()[2]))
+		writeLog(fmt.Sprintf("undoo failed to perform unmounting: %s, mountsRoot: %s, layerToKeep: %s", err, flag.Args()[1], flag.Args()[2]))
 		os.Exit(3)
 	}
 
 	cmd := exec.Command(flag.Args()[2], flag.Args()[3:]...)
 
 	if err := cmd.Start(); err != nil {
-		writeLog(fmt.Sprintf("failed to execute %s %#v: %s", cmd.Path, cmd.Args, err))
+		writeLog(fmt.Sprintf("undoo failed to execute: %s", err))
 		os.Exit(4)
 	}
 
@@ -83,7 +83,7 @@ func unmount(mountsRoot, layerToKeep string) error {
 				continue
 			}
 
-			err = syscall.Unmount(mount, 0)
+			err = syscall.Unmount(mount, syscall.MNT_DETACH)
 			if err != nil {
 				return err
 			}
