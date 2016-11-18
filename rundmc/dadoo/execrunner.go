@@ -20,6 +20,7 @@ import (
 	"code.cloudfoundry.org/lager"
 	"github.com/cloudfoundry/gunk/command_runner"
 	"github.com/kr/logfmt"
+	"github.com/npat-efault/poller"
 )
 
 //go:generate counterfeiter . PidGetter
@@ -207,8 +208,8 @@ func (p *process) mkfifos() error {
 	return nil
 }
 
-func (p process) openPipes(pio garden.ProcessIO) (stdin, stdout, stderr *os.File, err error) {
-	stdin, err = os.OpenFile(p.stdin, os.O_RDWR, 0600)
+func (p process) openPipes(pio garden.ProcessIO) (stdin, stdout, stderr io.ReadWriteCloser, err error) {
+	stdin, err = poller.Open(p.stdin, os.O_RDWR)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -224,18 +225,18 @@ func (p process) openPipes(pio garden.ProcessIO) (stdin, stdout, stderr *os.File
 	return stdin, stdout, stderr, nil
 }
 
-func openNonBlocking(fileName string) (*os.File, error) {
-	file, err := os.OpenFile(fileName, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
+func openNonBlocking(fileName string) (io.ReadWriteCloser, error) {
+	file, err := poller.Open(fileName, os.O_RDONLY|syscall.O_NONBLOCK)
 	if err != nil {
 		return nil, err
 	}
-	if err = syscall.SetNonblock(int(file.Fd()), false); err != nil {
+	if err = syscall.SetNonblock(int(file.Sysfd()), false); err != nil {
 		return nil, err
 	}
 	return file, nil
 }
 
-func (p process) streamData(pio garden.ProcessIO, stdin, stdout, stderr *os.File) {
+func (p process) streamData(pio garden.ProcessIO, stdin, stdout, stderr io.ReadWriteCloser) {
 	if pio.Stdin != nil {
 		go func() {
 			io.Copy(stdin, pio.Stdin)
