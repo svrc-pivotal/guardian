@@ -479,7 +479,7 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 			Logger:   logger.Session("backing-store-mgr"),
 		},
 		LoopMounter: &quotaed_aufs.Loop{
-			Retrier: retrier.New(retrier.ConstantBackoff(20, 500*time.Millisecond), nil),
+			Retrier: retrier.New(retrier.ConstantBackoff(1, 500*time.Millisecond), nil),
 			Logger:  logger.Session("loop-mounter"),
 		},
 		Retrier:  retrier.New(retrier.ConstantBackoff(20, 500*time.Millisecond), nil),

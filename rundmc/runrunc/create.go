@@ -31,7 +31,7 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 
 	defer log.Info("finished")
 
-	logFilePath := filepath.Join(bundlePath, "create.log")
+	logFilePath := fmt.Sprintf("/tmp/create-%s.log", id) //filepath.Join(bundlePath, "create.log")
 	pidFilePath := filepath.Join(bundlePath, "pidfile")
 	configFilePath := filepath.Join(bundlePath, "config.json")
 

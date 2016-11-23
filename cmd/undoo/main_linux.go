@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/docker/docker/pkg/reexec"
 )
@@ -67,6 +68,7 @@ func unmount(mountsRoot, layerToKeep string) error {
 	if err != nil {
 		return err
 	}
+	writeLog(fmt.Sprintf("At %s keeping %s, mounts: %s", time.Now().String(), layerToKeep, contents))
 
 	lines := strings.Split(string(contents), "\n")
 	for _, line := range lines {
@@ -77,6 +79,7 @@ func unmount(mountsRoot, layerToKeep string) error {
 				continue
 			}
 
+			writeLog(fmt.Sprintf("At %s unmounting %s, keeping %s", time.Now().String(), mount, layerToKeep))
 			err = syscall.Unmount(mount, syscall.MNT_DETACH)
 			if err != nil {
 				if err2 := exec.Command("mountpoint", mount).Run(); err2 != nil {
