@@ -111,10 +111,11 @@ var _ = Describe("Creating a Container", func() {
 			initProcPid = initProcessPID(container.Handle())
 		})
 
-		It("should create a depot subdirectory based on the container handle", func() {
+		FIt("should create a depot subdirectory based on the container handle", func() {
 			Expect(container.Handle()).NotTo(BeEmpty())
 			Expect(filepath.Join(client.DepotDir, container.Handle())).To(BeADirectory())
 			Expect(filepath.Join(client.DepotDir, container.Handle(), "config.json")).To(BeARegularFile())
+			//time.Sleep(time.Hour)
 		})
 
 		It("should lookup the right container", func() {
