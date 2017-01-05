@@ -71,6 +71,33 @@ var _ = Describe("Run", func() {
 		),
 	)
 
+	FIt("logs runc's stderr output to garden log", func() {
+		binPath, err := gexec.Build("code.cloudfoundry.org/guardian/gqt/cmd/runc_wrapper")
+		Expect(err).NotTo(HaveOccurred())
+
+		client = startGarden("--runc-bin", binPath, "--log-level", "debug")
+		container, err := client.Create(garden.ContainerSpec{})
+		Expect(err).NotTo(HaveOccurred())
+
+		out := gbytes.NewBuffer()
+		process, err := container.Run(garden.ProcessSpec{
+			Path: "/bin/sh",
+			Args: []string{
+				"-c",
+				"echo ohai 1>&2",
+			},
+		}, garden.ProcessIO{
+			Stdout: GinkgoWriter,
+			Stderr: io.MultiWriter(GinkgoWriter, out),
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(process.Wait()).To(Equal(0))
+
+		Expect(client).To(gbytes.Say("hello-from-runc-stderr"))
+		Expect(client).NotTo(gbytes.Say("ohai"))
+		Expect(out).To(gbytes.Say("ohai"))
+	})
+
 	It("cleans up any files by the time the process exits", func() {
 		client = startGarden()
 		container, err := client.Create(garden.ContainerSpec{})

@@ -1,6 +1,7 @@
 package gqt_test
 
 import (
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"

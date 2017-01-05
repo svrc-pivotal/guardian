@@ -38,7 +38,7 @@ func run() int {
 	flag.Parse()
 
 	runtime := flag.Args()[1] // e.g. runc
-	dir := flag.Args()[2]     // bundlePath for run, processPath for exec
+	dir := flag.Args()[2]     // processPath
 	containerId := flag.Args()[3]
 
 	signals := make(chan os.Signal, 100)
@@ -50,7 +50,7 @@ func run() int {
 	syncPipe := os.NewFile(5, "/proc/self/fd/5")
 	pidFilePath := filepath.Join(dir, "pidfile")
 
-	stdin, stdout, stderr, winsz := openPipes(dir)
+	stdin, stdout, winsz := openPipes(dir)
 
 	syncPipe.Write([]byte{0})
 
@@ -59,10 +59,10 @@ func run() int {
 		ttySlave := setupTty(stdin, stdout, pidFilePath, winsz, garden.WindowSize{Rows: *rows, Columns: *cols})
 		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-d", "-tty", "-console", ttySlave.Name(), "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-pid-file", pidFilePath, containerId)
 	} else {
-		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-d", "-pid-file", pidFilePath, containerId)
+		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-stderr", filepath.Join(dir, "stderr"), "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-d", "-pid-file", pidFilePath, containerId)
 		runcStartCmd.Stdin = stdin
 		runcStartCmd.Stdout = stdout
-		runcStartCmd.Stderr = stderr
+		runcStartCmd.Stderr = os.Stderr
 	}
 
 	// we need to be the subreaper so we can wait on the detached container process
@@ -117,14 +117,14 @@ func waitForContainerToExit(dir string, containerPid int, signals chan os.Signal
 	panic("ran out of signals") // cant happen
 }
 
-func openPipes(dir string) (io.Reader, io.Writer, io.Writer, io.Reader) {
+func openPipes(dir string) (io.Reader, io.Writer, io.Reader) {
 	stdin := openFifo(filepath.Join(dir, "stdin"), os.O_RDONLY)
 	stdout := openFifo(filepath.Join(dir, "stdout"), os.O_WRONLY|os.O_APPEND)
-	stderr := openFifo(filepath.Join(dir, "stderr"), os.O_WRONLY|os.O_APPEND)
+	openFifo(filepath.Join(dir, "stderr"), os.O_WRONLY|os.O_APPEND)
 	winsz := openFifo(filepath.Join(dir, "winsz"), os.O_RDWR)
 	openFifo(filepath.Join(dir, "exit"), os.O_RDWR) // open just so guardian can detect it being closed when we exit
 
-	return stdin, stdout, stderr, winsz
+	return stdin, stdout, winsz
 }
 
 func openFifo(path string, flags int) io.ReadWriter {

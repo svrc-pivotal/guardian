@@ -25,4 +25,6 @@ func main() {
 	logrus.Warn("guardian-runc-logging-test-warn")
 	logrus.Error("guardian-runc-logging-test-error")
 	logrus.Print("guardian-runc-logging-test-print")
+
+	println("hello-from-runc-stderr")
 }

@@ -154,7 +154,7 @@ func (r *execPreparer) Prepare(log lager.Logger, bundlePath string, spec garden.
 	}
 
 	if err := r.ensureDirExists(rootFsPath, cwd, u.hostUid, u.hostGid); err != nil {
-		log.Error("ensure-dir-failed", err)
+		log.Error("ensure-dir-failed-"+rootFsPath+"/"+cwd, err)
 		return nil, err
 	}
 

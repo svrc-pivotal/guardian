@@ -108,20 +108,23 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 	}
 
 	cmd.Stdin = bytes.NewReader(encodedSpec)
+	stderrP, _ := cmd.StderrPipe()
 	if err := d.commandRunner.Start(cmd); err != nil {
 		return nil, err
 	}
-	go d.commandRunner.Wait(cmd) // wait on spawned process to avoid zombies
+	go func() {
+		out, _ := ioutil.ReadAll(stderrP)
+		d.commandRunner.Wait(cmd) // wait on spawned process to avoid zombies
+		log.Info("runc-stderr........." + string(out))
+	}()
 
 	fd3w.Close()
 	logw.Close()
 	syncw.Close()
-
 	stdin, stdout, stderr, err := process.openPipes(pio)
 	if err != nil {
 		return nil, err
 	}
-
 	syncMsg := make([]byte, 1)
 	_, err = syncr.Read(syncMsg)
 	if err != nil {
