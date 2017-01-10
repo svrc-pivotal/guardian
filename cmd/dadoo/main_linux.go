@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,8 +19,8 @@ import (
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/rundmc/dadoo"
 	"github.com/eapache/go-resiliency/retrier"
-	"github.com/kr/pty"
 	"github.com/opencontainers/runc/libcontainer/system"
+	cmsg "github.com/opencontainers/runc/libcontainer/utils"
 )
 
 var uid = flag.Int("uid", 0, "uid to chown console to")
@@ -49,6 +50,7 @@ func run() int {
 	logFD := os.NewFile(4, "/proc/self/fd/4")
 	syncPipe := os.NewFile(5, "/proc/self/fd/5")
 	pidFilePath := filepath.Join(dir, "pidfile")
+	ttySocketPath := filepath.Join(dir, "tty.sock")
 
 	stdin, stdout, stderr, winsz := openPipes(dir)
 
@@ -56,8 +58,8 @@ func run() int {
 
 	var runcStartCmd *exec.Cmd
 	if *tty {
-		ttySlave := setupTty(stdin, stdout, pidFilePath, winsz, garden.WindowSize{Rows: *rows, Columns: *cols})
-		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-d", "-tty", "-console", ttySlave.Name(), "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-pid-file", pidFilePath, containerId)
+		setupTTYSocket(stdin, stdout, pidFilePath, winsz, garden.WindowSize{Rows: *rows, Columns: *cols}, ttySocketPath)
+		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-d", "-tty", "-console-socket", ttySocketPath, "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-pid-file", pidFilePath, containerId)
 	} else {
 		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-d", "-pid-file", pidFilePath, containerId)
 		runcStartCmd.Stdin = stdin
@@ -136,12 +138,56 @@ func openFifo(path string, flags int) io.ReadWriter {
 	check(err)
 	return r
 }
-
-func setupTty(stdin io.Reader, stdout io.Writer, pidFilePath string, winszFifo io.Reader, initialWinSize garden.WindowSize) *os.File {
-	m, s, err := pty.Open()
+func setupTTYSocket(stdin io.Reader, stdout io.Writer, pidFilePath string,
+	winszFifo io.Reader, initialWinSize garden.WindowSize, socketPath string) {
+	//create the socket
+	l, err := net.Listen("unix", socketPath)
 	if err != nil {
-		check(err)
+		panic(err)
 	}
+
+	//go to the background and set master
+	go func(ln net.Listener) {
+		for {
+			// We only accept a single connection, since we can only really have
+			// one reader for os.Stdin. Plus this is all a PoC.
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+
+			// Close ln, to allow for other instances to take over.
+			ln.Close()
+
+			// Get the fd of the connection.
+			unixconn, ok := conn.(*net.UnixConn)
+			if !ok {
+				return
+			}
+
+			socket, err := unixconn.File()
+			if err != nil {
+				return
+			}
+			defer socket.Close()
+
+			// Get the master file descriptor from runC.
+			master, err := cmsg.RecvFd(socket)
+			if err != nil {
+				return
+			}
+			setupTty(master, nil, stdin, stdout, pidFilePath, winszFifo, initialWinSize)
+
+		}
+
+	}(l)
+
+	return
+}
+
+func setupTty(m, s *os.File, stdin io.Reader, stdout io.Writer, pidFilePath string,
+	winszFifo io.Reader, initialWinSize garden.WindowSize) {
 
 	ioWg.Add(1)
 	go func() {
@@ -162,7 +208,7 @@ func setupTty(stdin io.Reader, stdout io.Writer, pidFilePath string, winszFifo i
 			}
 
 			// free up slave fd as soon as container process is running to avoid hanging
-			s.Close()
+			//s.Close()
 
 			p, err := os.FindProcess(pid)
 			check(err) // cant happen on linux
@@ -178,8 +224,8 @@ func setupTty(stdin io.Reader, stdout io.Writer, pidFilePath string, winszFifo i
 		}
 	}()
 
-	check(s.Chown(*uid, *gid))
-	return s
+	//check(s.Chown(*uid, *gid))
+	return
 }
 
 func readPid(pidFilePath string) (int, error) {
