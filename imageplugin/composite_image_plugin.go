@@ -2,7 +2,8 @@ package imageplugin
 
 import (
 	"bytes"
-	"fmt"
+	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -46,7 +47,6 @@ func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec root
 	createCmd.Stdout = stdoutBuffer
 	createCmd.Stderr = stdoutBuffer
 
-	log.Info(fmt.Sprintf("WILL %+v", createCmd))
 	if err := p.commandRunner.Run(createCmd); err != nil {
 		return "", nil, errorwrapper.Wrapf(err, "running image plugin create: %s", stdoutBuffer.String())
 	}
@@ -54,7 +54,12 @@ func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec root
 	imagePath := strings.TrimSpace(stdoutBuffer.String())
 	rootfsPath := filepath.Join(imagePath, "rootfs")
 
-	return rootfsPath, nil, nil
+	envVars, err := p.readEnvVars(imagePath)
+	if err != nil {
+		return "", nil, errorwrapper.Wrap(err, "reading image.json")
+	}
+
+	return rootfsPath, envVars, nil
 }
 
 func (p *CompositeImagePlugin) Destroy(log lager.Logger, handle string, privileged bool) error {
@@ -67,4 +72,22 @@ func (p *CompositeImagePlugin) Metrics(log lager.Logger, handle string, privileg
 
 func (p *CompositeImagePlugin) GC(log lager.Logger) error {
 	return nil
+}
+
+func (p *CompositeImagePlugin) readEnvVars(imagePath string) ([]string, error) {
+	imageConfigFile, err := os.Open(filepath.Join(imagePath, "image.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+
+		return nil, errorwrapper.Wrap(err, "could not open image configuration")
+	}
+
+	var imageConfig Image
+	if err := json.NewDecoder(imageConfigFile).Decode(&imageConfig); err != nil {
+		return nil, errorwrapper.Wrap(err, "parsing image config")
+	}
+
+	return imageConfig.Config.Env, nil
 }

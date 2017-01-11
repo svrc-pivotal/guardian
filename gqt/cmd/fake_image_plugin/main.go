@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -21,8 +22,16 @@ func main() {
 			Usage: "Path to use as image",
 		},
 		cli.StringFlag{
-			Name:  "output-path",
+			Name:  "args-path",
 			Usage: "Path to write args to",
+		},
+		cli.StringFlag{
+			Name:  "whoami-path",
+			Usage: "Path to write uid/gid to",
+		},
+		cli.StringFlag{
+			Name:  "json-file-to-copy",
+			Usage: "Path to json file to opy as image.json",
 		},
 	}
 
@@ -36,8 +45,14 @@ func main() {
 var CreateCommand = cli.Command{
 	Name: "create",
 	Action: func(ctx *cli.Context) error {
-		outputFile := ctx.GlobalString("output-path")
-		err := ioutil.WriteFile(outputFile, []byte(strings.Join(os.Args, " ")), 0777)
+		argsFile := ctx.GlobalString("args-path")
+		err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
+		if err != nil {
+			panic(err)
+		}
+
+		whoamiFile := ctx.GlobalString("whoami-path")
+		err = ioutil.WriteFile(whoamiFile, []byte(fmt.Sprintf("%d - %d", os.Getuid(), os.Getgid())), 0777)
 		if err != nil {
 			panic(err)
 		}
@@ -48,8 +63,42 @@ var CreateCommand = cli.Command{
 			panic(err)
 		}
 
+		if ctx.GlobalString("json-file-to-copy") != "" {
+			if err := copyFile(ctx.GlobalString("json-file-to-copy"), filepath.Join(imagePath, "image.json")); err != nil {
+				panic(err)
+			}
+		}
+
 		fmt.Println(imagePath)
 
 		return nil
 	},
+}
+
+func copyFile(srcPath, dstPath string) error {
+	dirPath := filepath.Dir(dstPath)
+	if err := os.MkdirAll(dirPath, 0777); err != nil {
+		return err
+	}
+
+	reader, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	writer, err := os.Create(dstPath)
+	if err != nil {
+		reader.Close()
+		return err
+	}
+
+	if _, err := io.Copy(writer, reader); err != nil {
+		writer.Close()
+		reader.Close()
+		return err
+	}
+
+	writer.Close()
+	reader.Close()
+
+	return os.Chmod(writer.Name(), 0777)
 }

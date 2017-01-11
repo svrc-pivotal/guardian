@@ -8,6 +8,7 @@ import (
 	"code.cloudfoundry.org/guardian/imageplugin"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
 var _ = FDescribe("UnprivilegedCommandCreator", func() {
@@ -15,17 +16,31 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 		commandCreator *imageplugin.UnprivilegedCommandCreator
 		binPath        string
 		extraArgs      []string
+		idMappings     []specs.LinuxIDMapping
 	)
 
 	BeforeEach(func() {
 		binPath = "/image-plugin"
 		extraArgs = []string{}
+		idMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{
+				ContainerID: 0,
+				HostID:      100,
+				Size:        1,
+			},
+			specs.LinuxIDMapping{
+				ContainerID: 1,
+				HostID:      1,
+				Size:        99,
+			},
+		}
 	})
 
 	JustBeforeEach(func() {
 		commandCreator = &imageplugin.UnprivilegedCommandCreator{
-			BinPath:   binPath,
-			ExtraArgs: extraArgs,
+			BinPath:    binPath,
+			ExtraArgs:  extraArgs,
+			IDMappings: idMappings,
 		}
 	})
 
@@ -66,6 +81,11 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 				Expect(createCmd.Args[2]).To(Equal("bar"))
 				Expect(createCmd.Args[3]).To(Equal("create"))
 			})
+		})
+
+		It("returns a command that runs as an unprivileged user", func() {
+			Expect(createCmd.SysProcAttr.Credential.Uid).To(Equal(idMappings[0].HostID))
+			Expect(createCmd.SysProcAttr.Credential.Gid).To(Equal(idMappings[0].HostID))
 		})
 	})
 })

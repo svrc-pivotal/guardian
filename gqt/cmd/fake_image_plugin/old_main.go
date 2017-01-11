@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -76,33 +75,33 @@ func pain() {
 	fmt.Printf(imagePath)
 }
 
-func copyFile(srcPath, dstPath string) error {
-	dirPath := filepath.Dir(dstPath)
-	if err := os.MkdirAll(dirPath, 0777); err != nil {
-		return err
-	}
+// func copyFile(srcPath, dstPath string) error {
+// 	dirPath := filepath.Dir(dstPath)
+// 	if err := os.MkdirAll(dirPath, 0777); err != nil {
+// 		return err
+// 	}
 
-	reader, err := os.Open(srcPath)
-	if err != nil {
-		return err
-	}
-	writer, err := os.Create(dstPath)
-	if err != nil {
-		reader.Close()
-		return err
-	}
+// 	reader, err := os.Open(srcPath)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	writer, err := os.Create(dstPath)
+// 	if err != nil {
+// 		reader.Close()
+// 		return err
+// 	}
 
-	if _, err := io.Copy(writer, reader); err != nil {
-		writer.Close()
-		reader.Close()
-		return err
-	}
+// 	if _, err := io.Copy(writer, reader); err != nil {
+// 		writer.Close()
+// 		reader.Close()
+// 		return err
+// 	}
 
-	writer.Close()
-	reader.Close()
+// 	writer.Close()
+// 	reader.Close()
 
-	return os.Chmod(writer.Name(), 0777)
-}
+// 	return os.Chmod(writer.Name(), 0777)
+// }
 
 func setEnvVars(imagePath string, env []string) error {
 	image := imageplugin_old.Image{

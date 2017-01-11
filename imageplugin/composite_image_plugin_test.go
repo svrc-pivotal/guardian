@@ -1,8 +1,12 @@
 package imageplugin_test
 
 import (
+	"encoding/json"
 	"errors"
+	"io/ioutil"
+	"os"
 	"os/exec"
+	"path/filepath"
 
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
 	"code.cloudfoundry.org/guardian/imageplugin"
@@ -46,6 +50,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			fakeImagePluginError  error
 
 			createRootfs string
+			createEnvs   []string
 			createErr    error
 		)
 
@@ -59,8 +64,9 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			fakeImagePluginStdout = "/image-rootfs/\n"
 			fakeImagePluginError = nil
 
-			createErr = nil
 			createRootfs = ""
+			createEnvs = []string{}
+			createErr = nil
 		})
 
 		JustBeforeEach(func() {
@@ -73,7 +79,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 					return fakeImagePluginError
 				},
 			)
-			createRootfs, _, createErr = imagePlugin.Create(fakeLogger, handle, rootfsProviderSpec)
+			createRootfs, createEnvs, createErr = imagePlugin.Create(fakeLogger, handle, rootfsProviderSpec)
 		})
 
 		It("calls the plugin to generate a create command", func() {
@@ -117,6 +123,66 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 
 		It("returns trimmed plugin stdout concatenated with 'rootfs'", func() {
 			Expect(createRootfs).To(Equal("/image-rootfs/rootfs"))
+		})
+
+		Context("when the image.json is not defined", func() {
+			It("returns an empty list of env vars", func() {
+				Expect(createEnvs).To(BeEmpty())
+			})
+		})
+
+		Context("when there is an image.json defined", func() {
+			var imagePath string
+
+			BeforeEach(func() {
+				var err error
+				imagePath, err = ioutil.TempDir("", "")
+				Expect(err).NotTo(HaveOccurred())
+
+				fakeImagePluginStdout = imagePath
+
+				customImageJsonFile, err := os.Create(filepath.Join(imagePath, "image.json"))
+				Expect(err).NotTo(HaveOccurred())
+				imageJson := imageplugin.Image{
+					Config: imageplugin.ImageConfig{
+						Env: []string{
+							"MY_VAR=set",
+							"MY_SECOND_VAR=also_set",
+						},
+					},
+				}
+				Expect(json.NewEncoder(customImageJsonFile).Encode(imageJson)).To(Succeed())
+				Expect(os.Chmod(customImageJsonFile.Name(), 0777)).To(Succeed())
+			})
+
+			AfterEach(func() {
+				Expect(os.RemoveAll(imagePath)).To(Succeed())
+			})
+
+			It("returns the list of env variables to set", func() {
+				Expect(createEnvs).To(ConsistOf([]string{"MY_VAR=set", "MY_SECOND_VAR=also_set"}))
+			})
+
+			Context("but it cannot be opened", func() {
+				BeforeEach(func() {
+					Expect(os.Chmod(filepath.Join(imagePath, "image.json"), 0000)).To(Succeed())
+				})
+
+				It("returns a wrapped error", func() {
+					Expect(createErr).To(MatchError(ContainSubstring("reading image.json:")))
+				})
+			})
+
+			Context("but it cannot be parsed", func() {
+				BeforeEach(func() {
+					err := ioutil.WriteFile(filepath.Join(imagePath, "image.json"), []byte("not-json"), 0777)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns a wrapped error", func() {
+					Expect(createErr).To(MatchError(ContainSubstring("reading image.json: parsing image config")))
+				})
+			})
 		})
 	})
 })

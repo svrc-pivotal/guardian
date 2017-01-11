@@ -2,20 +2,32 @@ package imageplugin
 
 import (
 	"os/exec"
+	"syscall"
+
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
 	"code.cloudfoundry.org/lager"
 )
 
 type UnprivilegedCommandCreator struct {
-	BinPath   string
-	ExtraArgs []string
+	BinPath    string
+	ExtraArgs  []string
+	IDMappings []specs.LinuxIDMapping
 }
 
 func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
 
 	args := append(p.ExtraArgs, "create", spec.RootFS.String(), handle)
-	return exec.Command(p.BinPath, args...), nil
+	cmd := exec.Command(p.BinPath, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: p.IDMappings[0].HostID,
+			Gid: p.IDMappings[0].HostID,
+		},
+	}
+
+	return cmd, nil
 
 	// 	var args []string
 	// 	if spec.Namespaced {

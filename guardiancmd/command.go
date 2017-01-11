@@ -452,8 +452,9 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 	if cmd.Image.Plugin.Path() != "" {
 		return imageplugin.New(
 			&imageplugin.UnprivilegedCommandCreator{
-				BinPath:   cmd.Image.Plugin.Path(),
-				ExtraArgs: cmd.Image.PluginExtraArgs,
+				BinPath:    cmd.Image.Plugin.Path(),
+				ExtraArgs:  cmd.Image.PluginExtraArgs,
+				IDMappings: idMappings,
 			},
 			linux_command_runner.New(),
 		)
