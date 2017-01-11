@@ -1,4 +1,4 @@
-package imageplugin
+package imageplugin_old
 
 import (
 	"bytes"
@@ -29,7 +29,7 @@ type ExternalImageManager struct {
 	extraArgs           []string
 }
 
-func New(binPath string, commandRunner command_runner.CommandRunner,
+func New(binPath, privilegedBinPath string, commandRunner command_runner.CommandRunner,
 	defaultBaseImage *url.URL, mappings []specs.LinuxIDMapping,
 	privilegedExtraArgs []string,
 	extraArgs []string,

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -451,17 +450,14 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 	}
 
 	if cmd.Image.Plugin.Path() != "" {
-		defaultRootFS, err := url.Parse(cmd.Containers.DefaultRootFS)
-		if err != nil {
-			logger.Fatal("failed-to-parse-default-rootfs", err)
-		}
-		return imageplugin.New(cmd.Image.Plugin.Path(), linux_command_runner.New(),
-			defaultRootFS, idMappings, cmd.Image.PrivilegedPluginExtraArgs,
-			cmd.Image.PluginExtraArgs)
+		return imageplugin.New(
+			&imageplugin.UnprivilegedCommandCreator{
+				BinPath:   cmd.Image.Plugin.Path(),
+				ExtraArgs: cmd.Image.PluginExtraArgs,
+			},
+			linux_command_runner.New(),
+		)
 	}
-	// if cmd.Image.Plugin.Path() != "" {
-	// 	return imagePlugin.New(cmd.Image.Plugin.Path(), cmd.Image.PluginExtraArgs, linux_command_runner.New())
-	// }
 	// if cmd.Image.Plugin.Path() != "" || cmd.Image.PrivilegedPlugin.Path() != "" {
 	// 	defaultRootFS, err := url.Parse(cmd.Containers.DefaultRootFSDir.Path())
 	// 	if err != nil {

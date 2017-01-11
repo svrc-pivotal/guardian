@@ -1,4 +1,4 @@
-package imageplugin_test
+package imageplugin_old_test
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
-	"code.cloudfoundry.org/guardian/imageplugin"
+	"code.cloudfoundry.org/guardian/imageplugin_old"
 	"code.cloudfoundry.org/lager"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -23,11 +23,11 @@ import (
 	"github.com/onsi/gomega/gbytes"
 )
 
-var _ = Describe("ExternalImageManager", func() {
+var _ = PDescribe("ExternalImageManager", func() {
 	var (
 		fakeCommandRunner    *fake_command_runner.FakeCommandRunner
 		logger               lager.Logger
-		externalImageManager *imageplugin.ExternalImageManager
+		externalImageManager *imageplugin_old.ExternalImageManager
 		baseImage            *url.URL
 		idMappings           []specs.LinuxIDMapping
 		defaultBaseImage     *url.URL
@@ -64,7 +64,7 @@ var _ = Describe("ExternalImageManager", func() {
 		var err error
 		defaultBaseImage, err = url.Parse("/default/image")
 		Expect(err).ToNot(HaveOccurred())
-		externalImageManager = imageplugin.New("/external-image-manager-bin",
+		externalImageManager = imageplugin_old.New("/external-image-manager-bin", "/external-privileged-image-manager-bin",
 			fakeCommandRunner, defaultBaseImage, idMappings, privilegedExtraArgs, extraArgs)
 
 		baseImage, err = url.Parse("/hello/image")
@@ -108,8 +108,8 @@ var _ = Describe("ExternalImageManager", func() {
 			Expect(err).NotTo(HaveOccurred())
 			fakeCmdRunnerStdout = imagePath
 
-			imageConfig := imageplugin.Image{
-				Config: imageplugin.ImageConfig{
+			imageConfig := imageplugin_old.Image{
+				Config: imageplugin_old.ImageConfig{
 					Env: []string{"HELLO=there", "PATH=/my-path/bin"},
 				},
 			}

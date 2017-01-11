@@ -1,4 +1,4 @@
-package imageplugin
+package imageplugin_old
 
 type Image struct {
 	Config ImageConfig `json:"config,omitempty"`
