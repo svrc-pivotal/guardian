@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"code.cloudfoundry.org/guardian/imageplugin"
+	"code.cloudfoundry.org/guardian/imageplugin_old"
 )
 
 var actions = []string{
@@ -105,8 +105,8 @@ func copyFile(srcPath, dstPath string) error {
 }
 
 func setEnvVars(imagePath string, env []string) error {
-	image := imageplugin.Image{
-		Config: imageplugin.ImageConfig{
+	image := imageplugin_old.Image{
+		Config: imageplugin_old.ImageConfig{
 			Env: env,
 		},
 	}

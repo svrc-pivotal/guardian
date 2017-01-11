@@ -173,8 +173,10 @@ type GuardianCommand struct {
 	} `group:"Image Graph"`
 
 	Image struct {
-		Plugin                    FileFlag `long:"image-plugin"           description:"Path to image plugin binary."`
-		PluginExtraArgs           []string `long:"image-plugin-extra-arg" description:"Extra argument to pass to the image plugin to create unprivileged images. Can be specified multiple times."`
+		Plugin          FileFlag `long:"image-plugin"           description:"Path to image plugin binary."`
+		PluginExtraArgs []string `long:"image-plugin-extra-arg" description:"Extra argument to pass to the image plugin to create unprivileged images. Can be specified multiple times."`
+
+		PrivilegedPlugin          FileFlag `long:"privileged-image-plugin"           description:"Path to privileged image plugin binary."`
 		PrivilegedPluginExtraArgs []string `long:"privileged-image-plugin-extra-arg" description:"Extra argument to pass to the image plugin to create privileged images. Can be specified multiple times."`
 	} `group:"Image"`
 
@@ -457,6 +459,18 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 			defaultRootFS, idMappings, cmd.Image.PrivilegedPluginExtraArgs,
 			cmd.Image.PluginExtraArgs)
 	}
+	// if cmd.Image.Plugin.Path() != "" {
+	// 	return imagePlugin.New(cmd.Image.Plugin.Path(), cmd.Image.PluginExtraArgs, linux_command_runner.New())
+	// }
+	// if cmd.Image.Plugin.Path() != "" || cmd.Image.PrivilegedPlugin.Path() != "" {
+	// 	defaultRootFS, err := url.Parse(cmd.Containers.DefaultRootFSDir.Path())
+	// 	if err != nil {
+	// 		logger.Fatal("failed-to-parse-default-rootfs", err)
+	// 	}
+	// 	return imageplugin.New(cmd.Image.Plugin.Path(), cmd.Image.PrivilegedPlugin.Path(), linux_command_runner.New(),
+	// 		defaultRootFS, idMappings, cmd.Image.PrivilegedPluginExtraArgs,
+	// 		cmd.Image.PluginExtraArgs)
+	// }
 
 	logger = logger.Session("volume-creator", lager.Data{"graphRoot": graphRoot})
 	runner := &logging.Runner{CommandRunner: linux_command_runner.New(), Logger: logger}

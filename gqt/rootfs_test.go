@@ -307,7 +307,7 @@ var _ = Describe("Rootfs container create parameter", func() {
 		})
 	})
 
-	Context("when an image plugin path is provided at startup", func() {
+	PContext("when an image plugin path is provided at startup", func() {
 		var (
 			imageID    string
 			imagePath  string

@@ -76,9 +76,8 @@ var _ = Describe("Gardener", func() {
 
 			It("should clean up any created volumes", func() {
 				Expect(volumeCreator.DestroyCallCount()).To(Equal(1))
-				_, handle, rootFSPath := volumeCreator.DestroyArgsForCall(0)
+				_, handle, _ := volumeCreator.DestroyArgsForCall(0)
 				Expect(handle).To(Equal("poor-banana"))
-				Expect(rootFSPath).To(Equal("rootfs"))
 			})
 
 			It("should destroy any container state", func() {
@@ -834,9 +833,8 @@ var _ = Describe("Gardener", func() {
 		It("asks the volume creator to destroy the container rootfs", func() {
 			gdnr.Destroy("some-handle")
 			Expect(volumeCreator.DestroyCallCount()).To(Equal(1))
-			_, handleToDestroy, rootFSPathToDestroy := volumeCreator.DestroyArgsForCall(0)
+			_, handleToDestroy, _ := volumeCreator.DestroyArgsForCall(0)
 			Expect(handleToDestroy).To(Equal("some-handle"))
-			Expect(rootFSPathToDestroy).To(Equal("rootfs"))
 		})
 
 		It("should destroy the key space of the property manager", func() {
@@ -926,10 +924,22 @@ var _ = Describe("Gardener", func() {
 				containerizer.RemoveBundleReturns(errors.New("bundle removal failed"))
 			})
 
-			It("return the error", func() {
+			It("returns the error", func() {
 				err := gdnr.Destroy("some-handle")
 				Expect(err).To(MatchError("bundle removal failed"))
 			})
+		})
+
+		PContext("when containerizer fails to fetch the info", func() {
+			BeforeEach(func() {
+				containerizer.InfoReturns(gardener.ActualContainerSpec{}, errors.New("info-failed"))
+			})
+
+			It("returns the error", func() {
+				err := gdnr.Destroy("some-handle")
+				Expect(err).To(MatchError("info-failed"))
+			})
+
 		})
 	})
 
@@ -1334,7 +1344,7 @@ var _ = Describe("Gardener", func() {
 			})
 		})
 
-		Context("when fails to get container info", func() {
+		PContext("when info returns an error", func() {
 			BeforeEach(func() {
 				containerizer.InfoReturns(gardener.ActualContainerSpec{}, errors.New("banana"))
 			})
