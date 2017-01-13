@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os/exec"
 
+	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
 	"code.cloudfoundry.org/guardian/imageplugin"
 	. "github.com/onsi/ginkgo"
@@ -47,17 +48,17 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 	Describe("CreateCommand", func() {
 		var (
 			createCmd *exec.Cmd
-			rootfs    string
+			spec      rootfs_provider.Spec
 		)
 
 		BeforeEach(func() {
-			rootfs = "/fake-registry/image"
+			rootfsURL, err := url.Parse("/fake-registry/image")
+			Expect(err).NotTo(HaveOccurred())
+			spec = rootfs_provider.Spec{RootFS: rootfsURL}
 		})
 
 		JustBeforeEach(func() {
-			rootfsURL, err := url.Parse(rootfs)
-			Expect(err).NotTo(HaveOccurred())
-			createCmd, _ = commandCreator.CreateCommand(nil, "test-handle", rootfs_provider.Spec{RootFS: rootfsURL})
+			createCmd, _ = commandCreator.CreateCommand(nil, "test-handle", spec)
 		})
 
 		It("returns a command with the correct image plugin path", func() {
@@ -90,11 +91,62 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 
 		Context("when using a docker image", func() {
 			BeforeEach(func() {
-				rootfs = "docker:///busybox#1.26.1"
+				var err error
+				spec.RootFS, err = url.Parse("docker:///busybox#1.26.1")
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("replaces the '#' with ':'", func() {
 				Expect(createCmd.Args[10]).To(Equal("docker:///busybox:1.26.1"))
+			})
+		})
+
+		Context("when disk quota is provided", func() {
+			Context("and the quota size is = 0", func() {
+				BeforeEach(func() {
+					spec.QuotaSize = 0
+				})
+
+				It("returns a command without the quota", func() {
+					Expect(createCmd.Args).NotTo(ContainElement("--disk-limit-size-bytes"))
+				})
+			})
+
+			Context("and the quota size is > 0", func() {
+				BeforeEach(func() {
+					spec.QuotaSize = 100000
+				})
+
+				It("returns a command with the quota", func() {
+					Expect(createCmd.Args[10]).To(Equal("--disk-limit-size-bytes"))
+					Expect(createCmd.Args[11]).To(Equal("100000"))
+				})
+
+				Context("and it's got an exclusive scope", func() {
+					BeforeEach(func() {
+						spec.QuotaScope = garden.DiskLimitScopeExclusive
+					})
+
+					It("returns a command with the quota and an exclusive scope", func() {
+						Expect(createCmd.Args[10]).To(Equal("--disk-limit-size-bytes"))
+						Expect(createCmd.Args[11]).To(Equal("100000"))
+
+						Expect(createCmd.Args).To(ContainElement("--exclude-image-from-quota"))
+					})
+				})
+
+				Context("and it's got a total scope", func() {
+					BeforeEach(func() {
+						spec.QuotaScope = garden.DiskLimitScopeTotal
+					})
+
+					It("returns a command with the quota and a total scope", func() {
+						Expect(createCmd.Args[10]).To(Equal("--disk-limit-size-bytes"))
+						Expect(createCmd.Args[11]).To(Equal("100000"))
+
+						Expect(createCmd.Args).NotTo(ContainElement("--exclude-image-from-quota"))
+					})
+				})
 			})
 		})
 

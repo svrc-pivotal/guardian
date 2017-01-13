@@ -174,6 +174,45 @@ var _ = FDescribe("Image Plugin", func() {
 					Expect(string(pluginArgsBytes)).To(ContainSubstring("docker:///busybox:1.26.1"))
 				})
 			})
+
+			Context("when specifying a quota", func() {
+				BeforeEach(func() {
+					containerSpec.Limits.Disk.ByteHard = 100000
+				})
+
+				It("calls the image plugin setting the quota", func() {
+					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(string(pluginArgsBytes)).To(ContainSubstring("--disk-limit-size-bytes 100000"))
+				})
+
+				Context("when the quota is total", func() {
+					BeforeEach(func() {
+						containerSpec.Limits.Disk.Scope = garden.DiskLimitScopeTotal
+					})
+
+					It("calls the image plugin without the exclusive flag", func() {
+						pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+						Expect(err).ToNot(HaveOccurred())
+
+						Expect(string(pluginArgsBytes)).NotTo(ContainSubstring("--exclude-image-from-quota"))
+					})
+				})
+
+				Context("when the quota is exclusive", func() {
+					BeforeEach(func() {
+						containerSpec.Limits.Disk.Scope = garden.DiskLimitScopeExclusive
+					})
+
+					It("calls the image plugin setting the exclusive flag", func() {
+						pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+						Expect(err).ToNot(HaveOccurred())
+
+						Expect(string(pluginArgsBytes)).To(ContainSubstring("--exclude-image-from-quota"))
+					})
+				})
+			})
 		})
 	})
 })

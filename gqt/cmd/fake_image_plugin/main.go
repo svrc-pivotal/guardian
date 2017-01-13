@@ -53,6 +53,14 @@ var CreateCommand = cli.Command{
 			Name:  "gid-mapping",
 			Usage: "gid mappings",
 		},
+		cli.Int64Flag{
+			Name:  "disk-limit-size-bytes",
+			Usage: "disk limit quota",
+		},
+		cli.BoolFlag{
+			Name:  "exclude-image-from-quota",
+			Usage: "exclude base image from disk quota",
+		},
 	},
 
 	Action: func(ctx *cli.Context) error {

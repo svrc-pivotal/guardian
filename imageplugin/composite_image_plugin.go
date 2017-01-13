@@ -42,7 +42,6 @@ func New(unprivilegedCommandCreator CommandCreator,
 }
 
 func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
-
 	if spec.RootFS.String() == "" {
 		var err error
 		spec.RootFS, err = url.Parse(p.defaultRootfs)

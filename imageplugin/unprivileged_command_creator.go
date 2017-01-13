@@ -3,11 +3,13 @@ package imageplugin
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 
+	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
 	"code.cloudfoundry.org/lager"
 )
@@ -24,6 +26,14 @@ func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle stri
 	for _, mapping := range p.IDMappings {
 		args = append(args, "--uid-mapping", stringifyMapping(mapping))
 		args = append(args, "--gid-mapping", stringifyMapping(mapping))
+	}
+
+	if spec.QuotaSize > 0 {
+		args = append(args, "--disk-limit-size-bytes", strconv.FormatInt(spec.QuotaSize, 10))
+
+		if spec.QuotaScope == garden.DiskLimitScopeExclusive {
+			args = append(args, "--exclude-image-from-quota")
+		}
 	}
 
 	rootfs := strings.Replace(spec.RootFS.String(), "#", ":", 1)
