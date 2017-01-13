@@ -14,6 +14,7 @@ import (
 	"code.cloudfoundry.org/lager"
 	"github.com/cloudfoundry/gunk/command_runner"
 	errorwrapper "github.com/pkg/errors"
+	"github.com/tscolari/lagregator"
 )
 
 //go:generate counterfeiter . CommandCreator
@@ -42,25 +43,33 @@ func New(unprivilegedCommandCreator CommandCreator,
 }
 
 func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
+	log = log.Session("image-plugin-create")
+	log.Debug("start")
+	defer log.Debug("end")
+
 	if spec.RootFS.String() == "" {
 		var err error
 		spec.RootFS, err = url.Parse(p.defaultRootfs)
 
 		if err != nil {
+			log.Error("parsing-default-rootfs-failed", err)
 			return "", nil, errorwrapper.Wrap(err, "parsing default rootfs")
 		}
 	}
 
 	createCmd, err := p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
 	if err != nil {
+		log.Error("create-image-plugin-command-failed", err)
 		return "", nil, errorwrapper.Wrap(err, "creating image plugin create-command")
 	}
 
 	stdoutBuffer := bytes.NewBuffer([]byte{})
 	createCmd.Stdout = stdoutBuffer
-	createCmd.Stderr = stdoutBuffer
+	createCmd.Stderr = lagregator.NewRelogger(log)
 
 	if err := p.commandRunner.Run(createCmd); err != nil {
+		logData := lager.Data{"action": "create", "stdout": stdoutBuffer.String()}
+		log.Error("composite-image-plugin-result", err, logData)
 		return "", nil, errorwrapper.Wrapf(err, "running image plugin create: %s", stdoutBuffer.String())
 	}
 
@@ -69,6 +78,7 @@ func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec root
 
 	envVars, err := p.readEnvVars(imagePath)
 	if err != nil {
+		log.Error("read-image-json-failed", err)
 		return "", nil, errorwrapper.Wrap(err, "reading image.json")
 	}
 

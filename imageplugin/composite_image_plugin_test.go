@@ -12,10 +12,12 @@ import (
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
 	"code.cloudfoundry.org/guardian/imageplugin"
 	fakes "code.cloudfoundry.org/guardian/imageplugin/imagepluginfakes"
-	"code.cloudfoundry.org/lager/lagertest"
+	"code.cloudfoundry.org/lager"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
+	"github.com/st3v/glager"
 )
 
 var _ = FDescribe("CompositeImagePlugin", func() {
@@ -26,7 +28,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 		fakeUnprivilegedCommandCreator *fakes.FakeCommandCreator
 		fakeCommandRunner              *fake_command_runner.FakeCommandRunner
 
-		fakeLogger *lagertest.TestLogger
+		fakeLogger lager.Logger
 
 		defaultRootfs string
 	)
@@ -35,7 +37,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 		fakeUnprivilegedCommandCreator = new(fakes.FakeCommandCreator)
 		fakeCommandRunner = fake_command_runner.New()
 
-		fakeLogger = lagertest.NewTestLogger("composite-image-plugin")
+		fakeLogger = glager.NewLogger("composite-image-plugin")
 
 		defaultRootfs = "/default-rootfs"
 	})
@@ -53,6 +55,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			rootfs             string
 
 			fakeImagePluginStdout string
+			fakeImagePluginStderr string
 			fakeImagePluginError  error
 
 			createRootfs string
@@ -68,6 +71,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			rootfs = "docker:///busybox"
 
 			fakeImagePluginStdout = "/image-rootfs/\n"
+			fakeImagePluginStderr = ""
 			fakeImagePluginError = nil
 
 			createRootfs = ""
@@ -82,6 +86,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 				},
 				func(cmd *exec.Cmd) error {
 					cmd.Stdout.Write([]byte(fakeImagePluginStdout))
+					cmd.Stderr.Write([]byte(fakeImagePluginStderr))
 					return fakeImagePluginError
 				},
 			)
@@ -96,8 +101,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			Expect(createErr).NotTo(HaveOccurred())
 			Expect(fakeUnprivilegedCommandCreator.CreateCommandCallCount()).To(Equal(1))
 
-			logArg, handleArg, specArg := fakeUnprivilegedCommandCreator.CreateCommandArgsForCall(0)
-			Expect(logArg).To(Equal(fakeLogger))
+			_, handleArg, specArg := fakeUnprivilegedCommandCreator.CreateCommandArgsForCall(0)
 			Expect(handleArg).To(Equal(handle))
 			Expect(specArg).To(Equal(rootfsProviderSpec))
 		})
@@ -216,6 +220,37 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 				It("returns a wrapped error", func() {
 					Expect(createErr).To(MatchError(ContainSubstring("reading image.json: parsing image config")))
 				})
+			})
+		})
+
+		Context("when the image plugin emits logs to stderr", func() {
+			BeforeEach(func() {
+				buffer := gbytes.NewBuffer()
+				externalLogger := lager.NewLogger("external-plugin")
+				externalLogger.RegisterSink(lager.NewWriterSink(buffer, lager.DEBUG))
+				externalLogger.Debug("debug-message", lager.Data{"type": "debug"})
+				externalLogger.Info("info-message", lager.Data{"type": "info"})
+				externalLogger.Error("error-message", errors.New("failed!"), lager.Data{"type": "error"})
+
+				fakeImagePluginStderr = string(buffer.Contents())
+			})
+
+			It("relogs the log entries", func() {
+				Expect(fakeLogger).To(glager.ContainSequence(
+					glager.Debug(
+						glager.Message("composite-image-plugin.image-plugin-create.external-plugin.debug-message"),
+						glager.Data("type", "debug"),
+					),
+					glager.Info(
+						glager.Message("composite-image-plugin.image-plugin-create.external-plugin.info-message"),
+						glager.Data("type", "info"),
+					),
+					glager.Error(
+						errors.New("failed!"),
+						glager.Message("composite-image-plugin.image-plugin-create.external-plugin.error-message"),
+						glager.Data("type", "error"),
+					),
+				))
 			})
 		})
 	})
