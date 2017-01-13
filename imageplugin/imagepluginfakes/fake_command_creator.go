@@ -11,7 +11,7 @@ import (
 )
 
 type FakeCommandCreator struct {
-	CreateCommandStub        func(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error)
+	CreateCommandStub        func(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd
 	createCommandMutex       sync.RWMutex
 	createCommandArgsForCall []struct {
 		log    lager.Logger
@@ -20,7 +20,6 @@ type FakeCommandCreator struct {
 	}
 	createCommandReturns struct {
 		result1 *exec.Cmd
-		result2 error
 	}
 	DestroyCommandStub        func(log lager.Logger, handle string) (*exec.Cmd, error)
 	destroyCommandMutex       sync.RWMutex
@@ -55,7 +54,7 @@ type FakeCommandCreator struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
+func (fake *FakeCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd {
 	fake.createCommandMutex.Lock()
 	fake.createCommandArgsForCall = append(fake.createCommandArgsForCall, struct {
 		log    lager.Logger
@@ -67,7 +66,7 @@ func (fake *FakeCommandCreator) CreateCommand(log lager.Logger, handle string, s
 	if fake.CreateCommandStub != nil {
 		return fake.CreateCommandStub(log, handle, spec)
 	} else {
-		return fake.createCommandReturns.result1, fake.createCommandReturns.result2
+		return fake.createCommandReturns.result1
 	}
 }
 
@@ -83,12 +82,11 @@ func (fake *FakeCommandCreator) CreateCommandArgsForCall(i int) (lager.Logger, s
 	return fake.createCommandArgsForCall[i].log, fake.createCommandArgsForCall[i].handle, fake.createCommandArgsForCall[i].spec
 }
 
-func (fake *FakeCommandCreator) CreateCommandReturns(result1 *exec.Cmd, result2 error) {
+func (fake *FakeCommandCreator) CreateCommandReturns(result1 *exec.Cmd) {
 	fake.CreateCommandStub = nil
 	fake.createCommandReturns = struct {
 		result1 *exec.Cmd
-		result2 error
-	}{result1, result2}
+	}{result1}
 }
 
 func (fake *FakeCommandCreator) DestroyCommand(log lager.Logger, handle string) (*exec.Cmd, error) {

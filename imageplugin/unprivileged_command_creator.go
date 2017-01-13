@@ -20,8 +20,7 @@ type UnprivilegedCommandCreator struct {
 	IDMappings []specs.LinuxIDMapping
 }
 
-func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
-
+func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd {
 	args := append(p.ExtraArgs, "create")
 	for _, mapping := range p.IDMappings {
 		args = append(args, "--uid-mapping", stringifyMapping(mapping))
@@ -47,7 +46,7 @@ func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle stri
 		},
 	}
 
-	return cmd, nil
+	return cmd
 
 	// 	var args []string
 	// 	if spec.Namespaced {

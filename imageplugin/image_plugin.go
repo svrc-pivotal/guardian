@@ -19,7 +19,7 @@ import (
 
 //go:generate counterfeiter . CommandCreator
 type CommandCreator interface {
-	CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error)
+	CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd
 	DestroyCommand(log lager.Logger, handle string) (*exec.Cmd, error)
 	MetricsCommand(log lager.Logger, handle string) (*exec.Cmd, error)
 	GCCommand(log lager.Logger) (*exec.Cmd, error)
@@ -57,12 +57,7 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 		}
 	}
 
-	createCmd, err := p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
-	if err != nil {
-		log.Error("create-image-plugin-command-failed", err)
-		return "", nil, errorwrapper.Wrap(err, "creating image plugin create-command")
-	}
-
+	createCmd := p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
 	stdoutBuffer := bytes.NewBuffer([]byte{})
 	createCmd.Stdout = stdoutBuffer
 	createCmd.Stderr = lagregator.NewRelogger(log)

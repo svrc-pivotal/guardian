@@ -65,7 +65,7 @@ var _ = FDescribe("ImagePlugin", func() {
 
 		BeforeEach(func() {
 			cmd = exec.Command("unpriv-plugin", "create")
-			fakeUnprivilegedCommandCreator.CreateCommandReturns(cmd, nil)
+			fakeUnprivilegedCommandCreator.CreateCommandReturns(cmd)
 
 			handle = "test-handle"
 			rootfs = "docker:///busybox"
@@ -127,16 +127,6 @@ var _ = FDescribe("ImagePlugin", func() {
 				It("returns the error", func() {
 					Expect(createErr).To(MatchError(ContainSubstring("parsing default rootfs")))
 				})
-			})
-		})
-
-		Context("when the plugin create-command creation fails", func() {
-			BeforeEach(func() {
-				fakeUnprivilegedCommandCreator.CreateCommandReturns(nil, errors.New("create-command-failed"))
-			})
-
-			It("returns a sensible error", func() {
-				Expect(createErr).To(MatchError("creating image plugin create-command: create-command-failed"))
 			})
 		})
 

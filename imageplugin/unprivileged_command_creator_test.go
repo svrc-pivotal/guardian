@@ -58,7 +58,7 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 		})
 
 		JustBeforeEach(func() {
-			createCmd, _ = commandCreator.CreateCommand(nil, "test-handle", spec)
+			createCmd = commandCreator.CreateCommand(nil, "test-handle", spec)
 		})
 
 		It("returns a command with the correct image plugin path", func() {
