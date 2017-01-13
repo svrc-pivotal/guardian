@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +27,8 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 		fakeCommandRunner              *fake_command_runner.FakeCommandRunner
 
 		fakeLogger *lagertest.TestLogger
+
+		defaultRootfs string
 	)
 
 	BeforeEach(func() {
@@ -33,10 +36,12 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 		fakeCommandRunner = fake_command_runner.New()
 
 		fakeLogger = lagertest.NewTestLogger("composite-image-plugin")
+
+		defaultRootfs = "/default-rootfs"
 	})
 
 	JustBeforeEach(func() {
-		imagePlugin = imageplugin.New(fakeUnprivilegedCommandCreator, fakeCommandRunner)
+		imagePlugin = imageplugin.New(fakeUnprivilegedCommandCreator, fakeCommandRunner, defaultRootfs)
 	})
 
 	Describe("Create", func() {
@@ -45,6 +50,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 
 			handle             string
 			rootfsProviderSpec rootfs_provider.Spec
+			rootfs             string
 
 			fakeImagePluginStdout string
 			fakeImagePluginError  error
@@ -59,7 +65,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			fakeUnprivilegedCommandCreator.CreateCommandReturns(cmd, nil)
 
 			handle = "test-handle"
-			rootfsProviderSpec = rootfs_provider.Spec{}
+			rootfs = "docker:///busybox"
 
 			fakeImagePluginStdout = "/image-rootfs/\n"
 			fakeImagePluginError = nil
@@ -79,6 +85,10 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 					return fakeImagePluginError
 				},
 			)
+
+			rootfsURL, err := url.Parse(rootfs)
+			Expect(err).NotTo(HaveOccurred())
+			rootfsProviderSpec = rootfs_provider.Spec{RootFS: rootfsURL}
 			createRootfs, createEnvs, createErr = imagePlugin.Create(fakeLogger, handle, rootfsProviderSpec)
 		})
 
@@ -90,6 +100,30 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			Expect(logArg).To(Equal(fakeLogger))
 			Expect(handleArg).To(Equal(handle))
 			Expect(specArg).To(Equal(rootfsProviderSpec))
+		})
+
+		Context("when spec.Rootfs is not defined", func() {
+			BeforeEach(func() {
+				rootfs = ""
+			})
+
+			It("uses the default rootfs instead", func() {
+				Expect(createErr).NotTo(HaveOccurred())
+				Expect(fakeUnprivilegedCommandCreator.CreateCommandCallCount()).To(Equal(1))
+
+				_, _, specArg := fakeUnprivilegedCommandCreator.CreateCommandArgsForCall(0)
+				Expect(specArg.RootFS.String()).To(Equal("/default-rootfs"))
+			})
+
+			Context("when there is an error parsing the default rootfs", func() {
+				BeforeEach(func() {
+					defaultRootfs = "%%"
+				})
+
+				It("returns the error", func() {
+					Expect(createErr).To(MatchError(ContainSubstring("parsing default rootfs")))
+				})
+			})
 		})
 
 		Context("when the plugin create-command creation fails", func() {

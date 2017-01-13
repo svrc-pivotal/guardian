@@ -3,6 +3,7 @@ package imageplugin
 import (
 	"bytes"
 	"encoding/json"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,18 +27,31 @@ type CommandCreator interface {
 type CompositeImagePlugin struct {
 	unprivilegedCommandCreator CommandCreator
 	commandRunner              command_runner.CommandRunner
+	defaultRootfs              string
 }
 
 func New(unprivilegedCommandCreator CommandCreator,
-	commandRunner command_runner.CommandRunner) *CompositeImagePlugin {
+	commandRunner command_runner.CommandRunner,
+	defaultRootfs string) *CompositeImagePlugin {
 
 	return &CompositeImagePlugin{
 		unprivilegedCommandCreator: unprivilegedCommandCreator,
 		commandRunner:              commandRunner,
+		defaultRootfs:              defaultRootfs,
 	}
 }
 
 func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
+
+	if spec.RootFS.String() == "" {
+		var err error
+		spec.RootFS, err = url.Parse(p.defaultRootfs)
+
+		if err != nil {
+			return "", nil, errorwrapper.Wrap(err, "parsing default rootfs")
+		}
+	}
+
 	createCmd, err := p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
 	if err != nil {
 		return "", nil, errorwrapper.Wrap(err, "creating image plugin create-command")

@@ -44,6 +44,17 @@ func main() {
 
 var CreateCommand = cli.Command{
 	Name: "create",
+	Flags: []cli.Flag{
+		cli.StringSliceFlag{
+			Name:  "uid-mapping",
+			Usage: "uid mappings",
+		},
+		cli.StringSliceFlag{
+			Name:  "gid-mapping",
+			Usage: "gid mappings",
+		},
+	},
+
 	Action: func(ctx *cli.Context) error {
 		argsFile := ctx.GlobalString("args-path")
 		err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)

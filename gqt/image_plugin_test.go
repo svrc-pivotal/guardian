@@ -63,19 +63,21 @@ var _ = FDescribe("Image Plugin", func() {
 			var (
 				containerSpec garden.ContainerSpec
 				container     garden.Container
+				handle        string
 			)
 
 			JustBeforeEach(func() {
 				var err error
 				container, err = client.Create(containerSpec)
 				Expect(err).NotTo(HaveOccurred())
+				handle = container.Handle()
 			})
 
 			AfterEach(func() {
 				Expect(client.Destroy(container.Handle())).To(Succeed())
 			})
 
-			FIt("executes the plugin, passing the correct args", func() {
+			It("executes the plugin, passing the correct args", func() {
 				maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
 
 				pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
@@ -93,7 +95,7 @@ var _ = FDescribe("Image Plugin", func() {
 					"--uid-mapping", fmt.Sprintf("1:1:%d", maxId-1),
 					"--gid-mapping", fmt.Sprintf("1:1:%d", maxId-1),
 					os.Getenv("GARDEN_TEST_ROOTFS"),
-					"handle",
+					handle,
 				}))
 			})
 
@@ -144,6 +146,32 @@ var _ = FDescribe("Image Plugin", func() {
 
 					Eventually(buffer).Should(gbytes.Say("MY_VAR=set"))
 					Eventually(buffer).Should(gbytes.Say("MY_SECOND_VAR=also_set"))
+				})
+			})
+
+			Context("when rootfs is not specified", func() {
+				BeforeEach(func() {
+					containerSpec.RootFSPath = ""
+				})
+
+				It("uses the default rootfs", func() {
+					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(string(pluginArgsBytes)).To(ContainSubstring(os.Getenv("GARDEN_TEST_ROOTFS")))
+				})
+			})
+
+			Context("when using tagged docker images", func() {
+				BeforeEach(func() {
+					containerSpec.RootFSPath = "docker:///busybox#1.26.1"
+				})
+
+				It("replaces the # with :", func() {
+					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(string(pluginArgsBytes)).To(ContainSubstring("docker:///busybox:1.26.1"))
 				})
 			})
 		})

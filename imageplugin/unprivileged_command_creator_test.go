@@ -47,12 +47,17 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 	Describe("CreateCommand", func() {
 		var (
 			createCmd *exec.Cmd
+			rootfs    string
 		)
 
+		BeforeEach(func() {
+			rootfs = "/fake-registry/image"
+		})
+
 		JustBeforeEach(func() {
-			rootfs, err := url.Parse("/fake-registry/image")
+			rootfsURL, err := url.Parse(rootfs)
 			Expect(err).NotTo(HaveOccurred())
-			createCmd, _ = commandCreator.CreateCommand(nil, "test-handle", rootfs_provider.Spec{RootFS: rootfs})
+			createCmd, _ = commandCreator.CreateCommand(nil, "test-handle", rootfs_provider.Spec{RootFS: rootfsURL})
 		})
 
 		It("returns a command with the correct image plugin path", func() {
@@ -63,12 +68,34 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 			Expect(createCmd.Args[1]).To(Equal("create"))
 		})
 
+		It("returns a command that has the id mappings as args", func() {
+			Expect(createCmd.Args).To(HaveLen(12))
+			Expect(createCmd.Args[2]).To(Equal("--uid-mapping"))
+			Expect(createCmd.Args[3]).To(Equal("0:100:1"))
+			Expect(createCmd.Args[4]).To(Equal("--gid-mapping"))
+			Expect(createCmd.Args[5]).To(Equal("0:100:1"))
+			Expect(createCmd.Args[6]).To(Equal("--uid-mapping"))
+			Expect(createCmd.Args[7]).To(Equal("1:1:99"))
+			Expect(createCmd.Args[8]).To(Equal("--gid-mapping"))
+			Expect(createCmd.Args[9]).To(Equal("1:1:99"))
+		})
+
 		It("returns a command with the provided rootfs as image", func() {
-			Expect(createCmd.Args[2]).To(Equal("/fake-registry/image"))
+			Expect(createCmd.Args[10]).To(Equal("/fake-registry/image"))
 		})
 
 		It("returns a command with the provided handle as id", func() {
-			Expect(createCmd.Args[3]).To(Equal("test-handle"))
+			Expect(createCmd.Args[11]).To(Equal("test-handle"))
+		})
+
+		Context("when using a docker image", func() {
+			BeforeEach(func() {
+				rootfs = "docker:///busybox#1.26.1"
+			})
+
+			It("replaces the '#' with ':'", func() {
+				Expect(createCmd.Args[10]).To(Equal("docker:///busybox:1.26.1"))
+			})
 		})
 
 		Context("when extra args are provided", func() {
@@ -87,6 +114,7 @@ var _ = FDescribe("UnprivilegedCommandCreator", func() {
 			Expect(createCmd.SysProcAttr.Credential.Uid).To(Equal(idMappings[0].HostID))
 			Expect(createCmd.SysProcAttr.Credential.Gid).To(Equal(idMappings[0].HostID))
 		})
+
 	})
 })
 

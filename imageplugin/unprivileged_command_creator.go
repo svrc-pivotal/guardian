@@ -1,7 +1,9 @@
 package imageplugin
 
 import (
+	"fmt"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -18,7 +20,15 @@ type UnprivilegedCommandCreator struct {
 
 func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
 
-	args := append(p.ExtraArgs, "create", spec.RootFS.String(), handle)
+	args := append(p.ExtraArgs, "create")
+	for _, mapping := range p.IDMappings {
+		args = append(args, "--uid-mapping", stringifyMapping(mapping))
+		args = append(args, "--gid-mapping", stringifyMapping(mapping))
+	}
+
+	rootfs := strings.Replace(spec.RootFS.String(), "#", ":", 1)
+
+	args = append(args, rootfs, handle)
 	cmd := exec.Command(p.BinPath, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
@@ -160,4 +170,8 @@ func (p *UnprivilegedCommandCreator) GCCommand(log lager.Logger) (*exec.Cmd, err
 	// }
 
 	return nil, nil
+}
+
+func stringifyMapping(mapping specs.LinuxIDMapping) string {
+	return fmt.Sprintf("%d:%d:%d", mapping.ContainerID, mapping.HostID, mapping.Size)
 }

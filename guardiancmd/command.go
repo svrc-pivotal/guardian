@@ -457,6 +457,7 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 				IDMappings: idMappings,
 			},
 			linux_command_runner.New(),
+			cmd.Containers.DefaultRootFS,
 		)
 	}
 	// if cmd.Image.Plugin.Path() != "" || cmd.Image.PrivilegedPlugin.Path() != "" {
