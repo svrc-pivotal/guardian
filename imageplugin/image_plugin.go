@@ -25,7 +25,7 @@ type CommandCreator interface {
 	GCCommand(log lager.Logger) (*exec.Cmd, error)
 }
 
-type CompositeImagePlugin struct {
+type ImagePlugin struct {
 	unprivilegedCommandCreator CommandCreator
 	commandRunner              command_runner.CommandRunner
 	defaultRootfs              string
@@ -33,16 +33,16 @@ type CompositeImagePlugin struct {
 
 func New(unprivilegedCommandCreator CommandCreator,
 	commandRunner command_runner.CommandRunner,
-	defaultRootfs string) *CompositeImagePlugin {
+	defaultRootfs string) *ImagePlugin {
 
-	return &CompositeImagePlugin{
+	return &ImagePlugin{
 		unprivilegedCommandCreator: unprivilegedCommandCreator,
 		commandRunner:              commandRunner,
 		defaultRootfs:              defaultRootfs,
 	}
 }
 
-func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
+func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
 	log = log.Session("image-plugin-create")
 	log.Debug("start")
 	defer log.Debug("end")
@@ -69,7 +69,7 @@ func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec root
 
 	if err := p.commandRunner.Run(createCmd); err != nil {
 		logData := lager.Data{"action": "create", "stdout": stdoutBuffer.String()}
-		log.Error("composite-image-plugin-result", err, logData)
+		log.Error("image-plugin-result", err, logData)
 		return "", nil, errorwrapper.Wrapf(err, "running image plugin create: %s", stdoutBuffer.String())
 	}
 
@@ -85,19 +85,19 @@ func (p *CompositeImagePlugin) Create(log lager.Logger, handle string, spec root
 	return rootfsPath, envVars, nil
 }
 
-func (p *CompositeImagePlugin) Destroy(log lager.Logger, handle string, privileged bool) error {
+func (p *ImagePlugin) Destroy(log lager.Logger, handle string, privileged bool) error {
 	return nil
 }
 
-func (p *CompositeImagePlugin) Metrics(log lager.Logger, handle string, privileged bool) (garden.ContainerDiskStat, error) {
+func (p *ImagePlugin) Metrics(log lager.Logger, handle string, privileged bool) (garden.ContainerDiskStat, error) {
 	return garden.ContainerDiskStat{}, nil
 }
 
-func (p *CompositeImagePlugin) GC(log lager.Logger) error {
+func (p *ImagePlugin) GC(log lager.Logger) error {
 	return nil
 }
 
-func (p *CompositeImagePlugin) readEnvVars(imagePath string) ([]string, error) {
+func (p *ImagePlugin) readEnvVars(imagePath string) ([]string, error) {
 	imageConfigFile, err := os.Open(filepath.Join(imagePath, "image.json"))
 	if err != nil {
 		if os.IsNotExist(err) {

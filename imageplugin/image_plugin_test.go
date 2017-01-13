@@ -20,10 +20,10 @@ import (
 	"github.com/st3v/glager"
 )
 
-var _ = FDescribe("CompositeImagePlugin", func() {
+var _ = FDescribe("ImagePlugin", func() {
 
 	var (
-		imagePlugin *imageplugin.CompositeImagePlugin
+		imagePlugin *imageplugin.ImagePlugin
 
 		fakeUnprivilegedCommandCreator *fakes.FakeCommandCreator
 		fakeCommandRunner              *fake_command_runner.FakeCommandRunner
@@ -37,7 +37,7 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 		fakeUnprivilegedCommandCreator = new(fakes.FakeCommandCreator)
 		fakeCommandRunner = fake_command_runner.New()
 
-		fakeLogger = glager.NewLogger("composite-image-plugin")
+		fakeLogger = glager.NewLogger("image-plugin")
 
 		defaultRootfs = "/default-rootfs"
 	})
@@ -238,16 +238,16 @@ var _ = FDescribe("CompositeImagePlugin", func() {
 			It("relogs the log entries", func() {
 				Expect(fakeLogger).To(glager.ContainSequence(
 					glager.Debug(
-						glager.Message("composite-image-plugin.image-plugin-create.external-plugin.debug-message"),
+						glager.Message("image-plugin.image-plugin-create.external-plugin.debug-message"),
 						glager.Data("type", "debug"),
 					),
 					glager.Info(
-						glager.Message("composite-image-plugin.image-plugin-create.external-plugin.info-message"),
+						glager.Message("image-plugin.image-plugin-create.external-plugin.info-message"),
 						glager.Data("type", "info"),
 					),
 					glager.Error(
 						errors.New("failed!"),
-						glager.Message("composite-image-plugin.image-plugin-create.external-plugin.error-message"),
+						glager.Message("image-plugin.image-plugin-create.external-plugin.error-message"),
 						glager.Data("type", "error"),
 					),
 				))
