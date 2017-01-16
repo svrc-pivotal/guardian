@@ -27,16 +27,19 @@ type CommandCreator interface {
 
 type ImagePlugin struct {
 	unprivilegedCommandCreator CommandCreator
+	privilegedCommandCreator   CommandCreator
 	commandRunner              command_runner.CommandRunner
 	defaultRootfs              string
 }
 
 func New(unprivilegedCommandCreator CommandCreator,
+	privilegedCommandCreator CommandCreator,
 	commandRunner command_runner.CommandRunner,
 	defaultRootfs string) *ImagePlugin {
 
 	return &ImagePlugin{
 		unprivilegedCommandCreator: unprivilegedCommandCreator,
+		privilegedCommandCreator:   privilegedCommandCreator,
 		commandRunner:              commandRunner,
 		defaultRootfs:              defaultRootfs,
 	}
@@ -57,7 +60,12 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 		}
 	}
 
-	createCmd := p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
+	var createCmd *exec.Cmd
+	if spec.Namespaced {
+		createCmd = p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
+	} else {
+		createCmd = p.privilegedCommandCreator.CreateCommand(log, handle, spec)
+	}
 	stdoutBuffer := bytes.NewBuffer([]byte{})
 	createCmd.Stdout = stdoutBuffer
 	createCmd.Stderr = lagregator.NewRelogger(log)

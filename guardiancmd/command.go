@@ -449,11 +449,16 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 		return gardener.NoopVolumeCreator{}
 	}
 
-	if cmd.Image.Plugin.Path() != "" {
+	if cmd.Image.Plugin.Path() != "" || cmd.Image.PrivilegedPlugin.Path() != "" {
 		return imageplugin.New(
 			&imageplugin.UnprivilegedCommandCreator{
 				BinPath:    cmd.Image.Plugin.Path(),
 				ExtraArgs:  cmd.Image.PluginExtraArgs,
+				IDMappings: idMappings,
+			},
+			&imageplugin.PrivilegedCommandCreator{
+				BinPath:    cmd.Image.PrivilegedPlugin.Path(),
+				ExtraArgs:  cmd.Image.PrivilegedPluginExtraArgs,
 				IDMappings: idMappings,
 			},
 			linux_command_runner.New(),

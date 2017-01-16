@@ -26,6 +26,7 @@ var _ = FDescribe("ImagePlugin", func() {
 		imagePlugin *imageplugin.ImagePlugin
 
 		fakeUnprivilegedCommandCreator *fakes.FakeCommandCreator
+		fakePrivilegedCommandCreator   *fakes.FakeCommandCreator
 		fakeCommandRunner              *fake_command_runner.FakeCommandRunner
 
 		fakeLogger lager.Logger
@@ -35,6 +36,7 @@ var _ = FDescribe("ImagePlugin", func() {
 
 	BeforeEach(func() {
 		fakeUnprivilegedCommandCreator = new(fakes.FakeCommandCreator)
+		fakePrivilegedCommandCreator = new(fakes.FakeCommandCreator)
 		fakeCommandRunner = fake_command_runner.New()
 
 		fakeLogger = glager.NewLogger("image-plugin")
@@ -43,7 +45,7 @@ var _ = FDescribe("ImagePlugin", func() {
 	})
 
 	JustBeforeEach(func() {
-		imagePlugin = imageplugin.New(fakeUnprivilegedCommandCreator, fakeCommandRunner, defaultRootfs)
+		imagePlugin = imageplugin.New(fakeUnprivilegedCommandCreator, fakePrivilegedCommandCreator, fakeCommandRunner, defaultRootfs)
 	})
 
 	Describe("Create", func() {
@@ -53,6 +55,7 @@ var _ = FDescribe("ImagePlugin", func() {
 			handle             string
 			rootfsProviderSpec rootfs_provider.Spec
 			rootfs             string
+			namespaced         bool
 
 			fakeImagePluginStdout string
 			fakeImagePluginStderr string
@@ -66,9 +69,11 @@ var _ = FDescribe("ImagePlugin", func() {
 		BeforeEach(func() {
 			cmd = exec.Command("unpriv-plugin", "create")
 			fakeUnprivilegedCommandCreator.CreateCommandReturns(cmd)
+			fakePrivilegedCommandCreator.CreateCommandReturns(cmd)
 
 			handle = "test-handle"
 			rootfs = "docker:///busybox"
+			namespaced = true //assume unprivileged by default
 
 			fakeImagePluginStdout = "/image-rootfs/\n"
 			fakeImagePluginStderr = ""
@@ -77,6 +82,7 @@ var _ = FDescribe("ImagePlugin", func() {
 			createRootfs = ""
 			createEnvs = []string{}
 			createErr = nil
+
 		})
 
 		JustBeforeEach(func() {
@@ -93,17 +99,34 @@ var _ = FDescribe("ImagePlugin", func() {
 
 			rootfsURL, err := url.Parse(rootfs)
 			Expect(err).NotTo(HaveOccurred())
-			rootfsProviderSpec = rootfs_provider.Spec{RootFS: rootfsURL}
+			rootfsProviderSpec = rootfs_provider.Spec{RootFS: rootfsURL, Namespaced: namespaced}
 			createRootfs, createEnvs, createErr = imagePlugin.Create(fakeLogger, handle, rootfsProviderSpec)
 		})
 
 		It("calls the plugin to generate a create command", func() {
 			Expect(createErr).NotTo(HaveOccurred())
 			Expect(fakeUnprivilegedCommandCreator.CreateCommandCallCount()).To(Equal(1))
+			Expect(fakePrivilegedCommandCreator.CreateCommandCallCount()).To(Equal(0))
 
 			_, handleArg, specArg := fakeUnprivilegedCommandCreator.CreateCommandArgsForCall(0)
 			Expect(handleArg).To(Equal(handle))
 			Expect(specArg).To(Equal(rootfsProviderSpec))
+		})
+
+		Context("when running with a privileged image plugin", func() {
+			BeforeEach(func() {
+				namespaced = false
+			})
+
+			It("calls the plugin to generate a create command with a privileged creator", func() {
+				Expect(createErr).NotTo(HaveOccurred())
+				Expect(fakePrivilegedCommandCreator.CreateCommandCallCount()).To(Equal(1))
+				Expect(fakeUnprivilegedCommandCreator.CreateCommandCallCount()).To(Equal(0))
+
+				_, handleArg, specArg := fakePrivilegedCommandCreator.CreateCommandArgsForCall(0)
+				Expect(handleArg).To(Equal(handle))
+				Expect(specArg).To(Equal(rootfsProviderSpec))
+			})
 		})
 
 		Context("when spec.Rootfs is not defined", func() {
