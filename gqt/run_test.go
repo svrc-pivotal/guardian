@@ -488,6 +488,22 @@ var _ = Describe("Attach", func() {
 		Expect(client.DestroyAndStop()).To(Succeed())
 	})
 
+	FIt("", func() {
+		var err error
+		container, err = client.Create(garden.ContainerSpec{})
+		Expect(err).NotTo(HaveOccurred())
+
+		process, err := container.Run(garden.ProcessSpec{
+			Path: "sh",
+			Args: []string{"-c", "exit 13"},
+		}, garden.ProcessIO{})
+		Expect(err).NotTo(HaveOccurred())
+
+		exitCode, err := process.Wait()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exitCode).To(Equal(13))
+	})
+
 	Context("when the process exits after calling .Attach", func() {
 		BeforeEach(func() {
 			var err error

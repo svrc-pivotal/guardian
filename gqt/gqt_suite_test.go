@@ -23,7 +23,18 @@ var defaultRuntime = map[string]string{
 
 var ginkgoIO = garden.ProcessIO{Stdout: GinkgoWriter, Stderr: GinkgoWriter}
 
-var ociRuntimeBin, gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, inspectorGardenBin, testNetPluginBin, tarBin string
+var (
+	ociRuntimeBin      string
+	gardenBin          string
+	initBin            string
+	nstarBin           string
+	dadooBin           string
+	testImagePluginBin string
+	inspectorGardenBin string
+	testNetPluginBin   string
+	tarBin             string
+	containerdShimBin  string
+)
 
 func TestGqt(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -56,6 +67,9 @@ func TestGqt(t *testing.T) {
 			bins["test_image_plugin_bin_path"], err = gexec.Build("code.cloudfoundry.org/guardian/gqt/cmd/fake_image_plugin")
 			Expect(err).NotTo(HaveOccurred())
 
+			bins["containerd_shim_bin_path"], err = gexec.Build("github.com/docker/containerd/cmd/containerd-shim")
+			Expect(err).NotTo(HaveOccurred())
+
 			cmd := exec.Command("make")
 			cmd.Dir = "../rundmc/nstar"
 			cmd.Stdout = GinkgoWriter
@@ -80,6 +94,7 @@ func TestGqt(t *testing.T) {
 		initBin = bins["init_bin_path"]
 		inspectorGardenBin = bins["inspector-garden_bin_path"]
 		testNetPluginBin = bins["test_net_plugin_bin_path"]
+		containerdShimBin = bins["containerd_shim_bin_path"]
 
 		tarBin = os.Getenv("GARDEN_TAR_PATH")
 	})
@@ -108,7 +123,7 @@ func TestGqt(t *testing.T) {
 
 func startGarden(argv ...string) *runner.RunningGarden {
 	rootfs := os.Getenv("GARDEN_TEST_ROOTFS")
-	return runner.Start(gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, rootfs, tarBin, argv...)
+	return runner.Start(gardenBin, initBin, nstarBin, containerdShimBin, testImagePluginBin, rootfs, tarBin, argv...)
 }
 
 func restartGarden(client *runner.RunningGarden, argv ...string) {

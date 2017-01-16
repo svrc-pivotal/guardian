@@ -38,6 +38,7 @@ import (
 	"code.cloudfoundry.org/guardian/properties"
 	"code.cloudfoundry.org/guardian/rundmc"
 	"code.cloudfoundry.org/guardian/rundmc/bundlerules"
+	"code.cloudfoundry.org/guardian/rundmc/containerd"
 	"code.cloudfoundry.org/guardian/rundmc/dadoo"
 	"code.cloudfoundry.org/guardian/rundmc/depot"
 	"code.cloudfoundry.org/guardian/rundmc/goci"
@@ -621,7 +622,7 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 		dadooPath,
 		runcPath,
 		runrunc.NewExecPreparer(&goci.BndlLoader{}, runrunc.LookupFunc(runrunc.LookupUser), chrootMkdir, NonRootMaxCaps),
-		dadoo.NewExecRunner(
+		containerd.NewExecRunner(
 			dadooPath,
 			runcPath,
 			cmd.wireUidGenerator(),

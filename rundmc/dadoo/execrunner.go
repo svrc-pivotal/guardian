@@ -78,7 +78,7 @@ func (d *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 	defer syncr.Close()
 
 	process := newProcess(processID, processPath, filepath.Join(processPath, "pidfile"), d.pidGetter)
-	process.mkfifos()
+	err = process.mkfifos()
 	if err != nil {
 		return nil, err
 	}
