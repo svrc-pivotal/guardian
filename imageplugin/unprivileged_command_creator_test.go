@@ -12,7 +12,7 @@ import (
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 )
 
-var _ = FDescribe("UnprivilegedCommandCreator", func() {
+var _ = Describe("UnprivilegedCommandCreator", func() {
 	var (
 		commandCreator *imageplugin.UnprivilegedCommandCreator
 		binPath        string

@@ -220,7 +220,7 @@ var _ = FDescribe("Image Plugin", func() {
 		})
 	})
 
-	FContext("when a privileged image plugin is provided", func() {
+	Context("when a privileged image plugin is provided", func() {
 		var (
 			tmpDir string
 		)
@@ -268,7 +268,7 @@ var _ = FDescribe("Image Plugin", func() {
 				Expect(client.Destroy(container.Handle())).To(Succeed())
 			})
 
-			FIt("executes the plugin, passing the correct args", func() {
+			It("executes the plugin, passing the correct args", func() {
 				pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
 				Expect(err).ToNot(HaveOccurred())
 

@@ -20,7 +20,7 @@ import (
 	"github.com/st3v/glager"
 )
 
-var _ = FDescribe("ImagePlugin", func() {
+var _ = Describe("ImagePlugin", func() {
 
 	var (
 		imagePlugin *imageplugin.ImagePlugin
