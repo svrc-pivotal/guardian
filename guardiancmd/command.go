@@ -692,10 +692,10 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 		WithMounts(unprivilegedMounts...).
 		WithMaskedPaths(defaultMaskedPaths())
 
-	unprivilegedBundle.Spec.Linux.Seccomp = seccomp
-	if appArmorProfile != "" {
-		unprivilegedBundle.Spec.Process.ApparmorProfile = appArmorProfile
-	}
+		//	unprivilegedBundle.Spec.Linux.Seccomp = seccomp
+	// if appArmorProfile != "" {
+	// 	unprivilegedBundle.Spec.Process.ApparmorProfile = appArmorProfile
+	// }
 
 	privilegedBundle := baseBundle.
 		WithMounts(privilegedMounts...).

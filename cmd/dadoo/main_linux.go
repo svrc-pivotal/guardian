@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -17,15 +18,14 @@ import (
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/rundmc/dadoo"
+
 	"github.com/eapache/go-resiliency/retrier"
-	"github.com/kr/pty"
 	"github.com/opencontainers/runc/libcontainer/system"
+	cmsg "github.com/opencontainers/runc/libcontainer/utils"
 )
 
 var uid = flag.Int("uid", 0, "uid to chown console to")
 var gid = flag.Int("gid", 0, "gid to chown console to")
-var rows = flag.Int("rows", 0, "rows for tty")
-var cols = flag.Int("cols", 0, "cols for tty")
 var tty = flag.Bool("tty", false, "tty requested")
 
 var ioWg *sync.WaitGroup = &sync.WaitGroup{}
@@ -49,20 +49,23 @@ func run() int {
 	logFD := os.NewFile(4, "/proc/self/fd/4")
 	syncPipe := os.NewFile(5, "/proc/self/fd/5")
 	pidFilePath := filepath.Join(dir, "pidfile")
+	ttySocketPath := filepath.Join(dir, "tty.sock")
 
 	stdin, stdout, stderr, winsz := openPipes(dir)
 
 	syncPipe.Write([]byte{0})
 
 	var runcStartCmd *exec.Cmd
+	consoleReady := make(chan bool)
 	if *tty {
-		ttySlave := setupTty(stdin, stdout, pidFilePath, winsz, garden.WindowSize{Rows: *rows, Columns: *cols})
-		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-d", "-tty", "-console", ttySlave.Name(), "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-pid-file", pidFilePath, containerId)
+		setupTTYSocket(stdin, stdout, pidFilePath, winsz, ttySocketPath, consoleReady)
+		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-d", "-tty", "-console-socket", ttySocketPath, "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-pid-file", pidFilePath, containerId)
 	} else {
 		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-d", "-pid-file", pidFilePath, containerId)
 		runcStartCmd.Stdin = stdin
 		runcStartCmd.Stdout = stdout
 		runcStartCmd.Stderr = stderr
+		close(consoleReady)
 	}
 
 	// we need to be the subreaper so we can wait on the detached container process
@@ -73,6 +76,7 @@ func run() int {
 		return 2
 	}
 
+	<-consoleReady
 	var status syscall.WaitStatus
 	var rusage syscall.Rusage
 	_, err := syscall.Wait4(runcStartCmd.Process.Pid, &status, 0, &rusage)
@@ -136,12 +140,55 @@ func openFifo(path string, flags int) io.ReadWriter {
 	check(err)
 	return r
 }
-
-func setupTty(stdin io.Reader, stdout io.Writer, pidFilePath string, winszFifo io.Reader, initialWinSize garden.WindowSize) *os.File {
-	m, s, err := pty.Open()
+func setupTTYSocket(stdin io.Reader, stdout io.Writer, pidFilePath string,
+	winszFifo io.Reader, socketPath string, consoleReady chan bool) {
+	//create the socket
+	l, err := net.Listen("unix", socketPath)
 	if err != nil {
-		check(err)
+		panic(err)
 	}
+
+	//go to the background and set master
+	go func(ln net.Listener) {
+		//for {
+		// We only accept a single connection, since we can only really have
+		// one reader for os.Stdin. Plus this is all a PoC.
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Close ln, to allow for other instances to take over.
+		ln.Close()
+
+		// Get the fd of the connection.
+		unixconn, ok := conn.(*net.UnixConn)
+		if !ok {
+			return
+		}
+
+		socket, err := unixconn.File()
+		if err != nil {
+			return
+		}
+		defer socket.Close()
+
+		// Get the master file descriptor from runC.
+		master, err := cmsg.RecvFd(socket)
+		if err != nil {
+			return
+		}
+		setupTty(master, nil, stdin, stdout, pidFilePath, winszFifo)
+
+		close(consoleReady)
+	}(l)
+
+	return
+}
+
+func setupTty(m, s *os.File, stdin io.Reader, stdout io.Writer, pidFilePath string,
+	winszFifo io.Reader) {
 
 	ioWg.Add(1)
 	go func() {
@@ -151,35 +198,18 @@ func setupTty(stdin io.Reader, stdout io.Writer, pidFilePath string, winszFifo i
 
 	go io.Copy(m, stdin)
 
-	dadoo.SetWinSize(m, initialWinSize)
-
 	go func() {
 		for {
-			pid, err := readPid(pidFilePath)
-			if err != nil {
-				println("Timed out trying to open pidfile: ", err.Error())
-				return
-			}
-
-			// free up slave fd as soon as container process is running to avoid hanging
-			s.Close()
-
-			p, err := os.FindProcess(pid)
-			check(err) // cant happen on linux
-
 			var winSize garden.WindowSize
 			if err := json.NewDecoder(winszFifo).Decode(&winSize); err != nil {
 				println("invalid winsz event", err)
-				continue // not much we can do here..
+				break // not much we can do here..
 			}
-
 			dadoo.SetWinSize(m, winSize)
-			p.Signal(syscall.SIGWINCH)
 		}
 	}()
 
-	check(s.Chown(*uid, *gid))
-	return s
+	return
 }
 
 func readPid(pidFilePath string) (int, error) {
