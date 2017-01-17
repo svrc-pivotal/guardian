@@ -490,7 +490,9 @@ var _ = Describe("Attach", func() {
 
 	FIt("", func() {
 		var err error
-		container, err = client.Create(garden.ContainerSpec{})
+		container, err = client.Create(garden.ContainerSpec{
+			Handle: "containerdcontainer",
+		})
 		Expect(err).NotTo(HaveOccurred())
 
 		process, err := container.Run(garden.ProcessSpec{

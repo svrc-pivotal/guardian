@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
+	"time"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/rundmc/runrunc"
@@ -72,20 +75,19 @@ func (c *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 	}()
 
 	process := newProcess(processID, processPath, filepath.Join(processPath, "pidfile"), exitPipe, controlPipe)
+	log.Info(fmt.Sprintf("ExecRunner: %#v", c))
 
-	cmd := exec.Command(c.containerdShimPath, handle, processPath, c.runcPath) // TODO: does the second arg need to be the actual bundlePath of the container?
+	// bundle dir is not really needed on exec - we just need an existing dir to run runc from
+	cmd := exec.Command(c.containerdShimPath, handle, ".", c.runcPath)
+	log.Info(fmt.Sprintf("cmd: %#v", cmd))
 	cmd.Dir = processPath
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
 
 	state := processState{
-		Process: spec.Process,
-		// Exec:    o.exec,
-		// Stdin:          process.stdin,
-		// Stdout:         process.stdout,
-		// Stderr:         process.stderr,
-		// RuntimeArgs:    o.runtimeArgs,
+		Exec:           true,
+		Process:        spec.Process,
 		NoPivotRoot:    false,
 		CheckpointPath: "",
 		RootUID:        spec.HostUID,
@@ -102,9 +104,10 @@ func (c *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 		return nil, fmt.Errorf("failed to create shim's processState for container %s: %s", handle, err.Error())
 	}
 
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("failed to start shim for container %s: %s", handle, err.Error())
+	if err := c.commandRunner.Start(cmd); err != nil {
+		return nil, err
 	}
+	go c.commandRunner.Wait(cmd) // wait on spawned process to avoid zombies
 
 	return process, nil
 }
@@ -134,18 +137,20 @@ func getControlPipes(root string) (exitPipe *os.File, controlPipe *os.File, err 
 }
 
 type process struct {
-	id          string
-	exitChan    chan struct{}
-	exitPipe    *os.File
-	controlPipe *os.File
+	id             string
+	exitStatusFile string
+	exitChan       chan struct{}
+	exitPipe       *os.File
+	controlPipe    *os.File
 }
 
 func newProcess(id, dir string, pidFilePath string, exitPipe *os.File, controlPipe *os.File) *process {
 	return &process{
-		id:          id,
-		exitChan:    make(chan struct{}),
-		exitPipe:    exitPipe,
-		controlPipe: controlPipe,
+		id:             id,
+		exitStatusFile: filepath.Join(dir, "exitStatus"),
+		exitChan:       make(chan struct{}),
+		exitPipe:       exitPipe,
+		controlPipe:    controlPipe,
 	}
 }
 
@@ -154,7 +159,13 @@ func (p *process) ID() string {
 }
 
 func (p *process) Wait() (int, error) {
-	return -1, errors.New("Wait! Not implemented")
+	for {
+		exitStatus, err := ioutil.ReadFile(p.exitStatusFile)
+		if err == nil {
+			return strconv.Atoi(string(exitStatus))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (p *process) SetTTY(ttyspec garden.TTYSpec) error {
