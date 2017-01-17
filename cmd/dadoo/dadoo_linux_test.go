@@ -81,13 +81,32 @@ var _ = Describe("Dadoo", func() {
 		)
 
 		BeforeEach(func() {
-			bundle = bundle.WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "sleep 9999"}, Cwd: "/"})
+			bundle = bundle.WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "sleep 5 &"}, Cwd: "/"})
 			processDir = filepath.Join(bundlePath, "processes", "abc")
 			Expect(os.MkdirAll(processDir, 0777)).To(Succeed())
 		})
 
 		JustBeforeEach(func() {
 			cmd := exec.Command("runc", "create", "--bundle", bundlePath, filepath.Base(bundlePath))
+			//outBuffer := gbytes.NewBuffer()
+			//cmd.Stdout = outBuffer
+			//cmd.Stderr = outBuffer
+			//err := cmd.Start()
+
+			out, err := cmd.CombinedOutput()
+			if 1 == 1 {
+				panic(string(out))
+			}
+			if err != nil {
+				//fmt.Println(string(outBuffer.Contents()))
+				fmt.Println("****", err.Error())
+			}
+			Expect(err).To(Succeed())
+
+		})
+
+		AfterEach(func() {
+			cmd := exec.Command("runc", "delete", filepath.Base(bundlePath))
 			Expect(cmd.Run()).To(Succeed())
 		})
 
@@ -383,13 +402,17 @@ var _ = Describe("Dadoo", func() {
 			})
 
 			Context("when defining the window size", func() {
-				It("should set initial window size", func() {
+				FIt("should set initial window size", func(done Done) {
 					spec := specs.Process{
 						Args: []string{
 							"/bin/sh", "-c", `stty -a`,
 						},
 						Cwd:      "/",
 						Terminal: true,
+						ConsoleSize: specs.Box{
+							Height: 17,
+							Width:  13,
+						},
 					}
 
 					encSpec, err := json.Marshal(spec)
@@ -417,7 +440,9 @@ var _ = Describe("Dadoo", func() {
 					data, err := ioutil.ReadAll(stdout)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(string(data)).To(ContainSubstring("rows 17; columns 13;"))
-				})
+
+					close(done)
+				}, 10.0)
 
 				It("should update window size", func() {
 					spec := specs.Process{
