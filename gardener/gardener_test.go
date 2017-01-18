@@ -833,8 +833,25 @@ var _ = Describe("Gardener", func() {
 		It("asks the volume creator to destroy the container rootfs", func() {
 			gdnr.Destroy("some-handle")
 			Expect(volumeCreator.DestroyCallCount()).To(Equal(1))
-			_, handleToDestroy, _ := volumeCreator.DestroyArgsForCall(0)
+			_, handleToDestroy, namespaced := volumeCreator.DestroyArgsForCall(0)
 			Expect(handleToDestroy).To(Equal("some-handle"))
+			Expect(namespaced).To(BeTrue())
+		})
+
+		Context("when the container is privileged", func() {
+			BeforeEach(func() {
+				containerizer.InfoReturns(gardener.ActualContainerSpec{
+					Privileged: true,
+				}, nil)
+			})
+
+			It("asks the volume creator to destroy a namespaced container rootfs", func() {
+				gdnr.Destroy("some-handle")
+				Expect(volumeCreator.DestroyCallCount()).To(Equal(1))
+				_, handleToDestroy, namespaced := volumeCreator.DestroyArgsForCall(0)
+				Expect(handleToDestroy).To(Equal("some-handle"))
+				Expect(namespaced).To(BeFalse())
+			})
 		})
 
 		It("should destroy the key space of the property manager", func() {
@@ -930,7 +947,7 @@ var _ = Describe("Gardener", func() {
 			})
 		})
 
-		PContext("when containerizer fails to fetch the info", func() {
+		Context("when containerizer fails to fetch the info", func() {
 			BeforeEach(func() {
 				containerizer.InfoReturns(gardener.ActualContainerSpec{}, errors.New("info-failed"))
 			})

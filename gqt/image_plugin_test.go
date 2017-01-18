@@ -33,6 +33,10 @@ var _ = FDescribe("Image Plugin", func() {
 		client = startGarden(args...)
 	})
 
+	AfterEach(func() {
+		Expect(client.Stop()).To(Succeed())
+	})
+
 	Context("when an unprivileged image plugin is provided", func() {
 		var (
 			tmpDir string
@@ -50,9 +54,7 @@ var _ = FDescribe("Image Plugin", func() {
 				"--image-plugin-extra-arg", "\"--image-path\"",
 				"--image-plugin-extra-arg", tmpDir,
 				"--image-plugin-extra-arg", "\"--args-path\"",
-				"--image-plugin-extra-arg", filepath.Join(tmpDir, "args"),
-				"--image-plugin-extra-arg", "\"--whoami-path\"",
-				"--image-plugin-extra-arg", filepath.Join(tmpDir, "whoami"))
+				"--image-plugin-extra-arg", filepath.Join(tmpDir, "args"))
 		})
 
 		AfterEach(func() {
@@ -64,10 +66,17 @@ var _ = FDescribe("Image Plugin", func() {
 				containerSpec garden.ContainerSpec
 				container     garden.Container
 				handle        string
+
+				destroyContainer bool
 			)
 
 			BeforeEach(func() {
 				containerSpec.Privileged = false
+				destroyContainer = true
+
+				args = append(args,
+					"--image-plugin-extra-arg", "\"--create-whoami-path\"",
+					"--image-plugin-extra-arg", filepath.Join(tmpDir, "create-whoami"))
 			})
 
 			JustBeforeEach(func() {
@@ -78,7 +87,9 @@ var _ = FDescribe("Image Plugin", func() {
 			})
 
 			AfterEach(func() {
-				Expect(client.Destroy(container.Handle())).To(Succeed())
+				if destroyContainer {
+					Expect(client.Destroy(container.Handle())).To(Succeed())
+				}
 			})
 
 			It("executes the plugin, passing the correct args", func() {
@@ -92,7 +103,7 @@ var _ = FDescribe("Image Plugin", func() {
 					testImagePluginBin,
 					"--image-path", tmpDir,
 					"--args-path", filepath.Join(tmpDir, "args"),
-					"--whoami-path", filepath.Join(tmpDir, "whoami"),
+					"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
 					"create",
 					"--uid-mapping", fmt.Sprintf("0:%d:1", maxId),
 					"--gid-mapping", fmt.Sprintf("0:%d:1", maxId),
@@ -106,7 +117,7 @@ var _ = FDescribe("Image Plugin", func() {
 			It("executes the plugin as the correct user", func() {
 				maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
 
-				whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "whoami"))
+				whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "create-whoami"))
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(string(whoamiBytes)).To(ContainSubstring(fmt.Sprintf("%d - %d", maxId, maxId)))
@@ -216,6 +227,85 @@ var _ = FDescribe("Image Plugin", func() {
 						Expect(string(pluginArgsBytes)).To(ContainSubstring("--exclude-image-from-quota"))
 					})
 				})
+
+				Context("when the plugin logs to stderr", func() {
+					BeforeEach(func() {
+						args = append(args,
+							"--image-plugin-extra-arg", "\"--create-log-content\"",
+							"--image-plugin-extra-arg", "CREATE-FAKE-LOG-LINE")
+					})
+
+					It("relogs the plugin's stderr to the garden logs", func() {
+						Eventually(client).Should(gbytes.Say("CREATE-FAKE-LOG-LINE"))
+					})
+				})
+			})
+
+			PContext("and metrics are collected on that containers", func() {
+				It("executes the plugin, passing the correct args", func() {
+					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+					Expect(err).ToNot(HaveOccurred())
+
+					pluginArgs := strings.Split(string(pluginArgsBytes), " ")
+					Expect(pluginArgs).To(Equal([]string{
+						testImagePluginBin,
+						"--image-path", tmpDir,
+						"--args-path", filepath.Join(tmpDir, "args"),
+						"--whoami-path", filepath.Join(tmpDir, "whoami"),
+						"stats",
+						handle,
+					}))
+				})
+			})
+
+			Context("and that container is destroyed", func() {
+				BeforeEach(func() {
+					destroyContainer = false
+					args = append(args,
+						"--image-plugin-extra-arg", "\"--destroy-whoami-path\"",
+						"--image-plugin-extra-arg", filepath.Join(tmpDir, "destroy-whoami"))
+				})
+
+				JustBeforeEach(func() {
+					Expect(client.Destroy(container.Handle())).Should(Succeed())
+				})
+
+				It("executes the plugin, passing the correct args", func() {
+					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+					Expect(err).ToNot(HaveOccurred())
+
+					pluginArgs := strings.Split(string(pluginArgsBytes), " ")
+					Expect(pluginArgs).To(Equal([]string{
+						testImagePluginBin,
+						"--image-path", tmpDir,
+						"--args-path", filepath.Join(tmpDir, "args"),
+						"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
+						"--destroy-whoami-path", filepath.Join(tmpDir, "destroy-whoami"),
+						"delete",
+						handle,
+					}))
+				})
+
+				It("executes the plugin as the correct user", func() {
+					maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
+
+					whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "destroy-whoami"))
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(string(whoamiBytes)).To(ContainSubstring(fmt.Sprintf("%d - %d", maxId, maxId)))
+				})
+
+				Context("when the plugin logs to stderr", func() {
+					BeforeEach(func() {
+						args = append(args,
+							"--image-plugin-extra-arg", "\"--destroy-log-content\"",
+							"--image-plugin-extra-arg", "DESTROY-FAKE-LOG-LINE")
+					})
+
+					It("relogs the plugin's stderr to the garden logs", func() {
+						Eventually(client).Should(gbytes.Say("DESTROY-FAKE-LOG-LINE"))
+					})
+				})
 			})
 		})
 	})
@@ -237,9 +327,7 @@ var _ = FDescribe("Image Plugin", func() {
 				"--privileged-image-plugin-extra-arg", "\"--image-path\"",
 				"--privileged-image-plugin-extra-arg", tmpDir,
 				"--privileged-image-plugin-extra-arg", "\"--args-path\"",
-				"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "args"),
-				"--privileged-image-plugin-extra-arg", "\"--whoami-path\"",
-				"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "whoami"))
+				"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "args"))
 		})
 
 		AfterEach(func() {
@@ -251,10 +339,17 @@ var _ = FDescribe("Image Plugin", func() {
 				containerSpec garden.ContainerSpec
 				container     garden.Container
 				handle        string
+
+				destroyContainer bool
 			)
 
 			BeforeEach(func() {
 				containerSpec.Privileged = true
+				destroyContainer = false
+
+				args = append(args,
+					"--privileged-image-plugin-extra-arg", "\"--create-whoami-path\"",
+					"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "create-whoami"))
 			})
 
 			JustBeforeEach(func() {
@@ -265,7 +360,9 @@ var _ = FDescribe("Image Plugin", func() {
 			})
 
 			AfterEach(func() {
-				Expect(client.Destroy(container.Handle())).To(Succeed())
+				if destroyContainer {
+					Expect(client.Destroy(container.Handle())).To(Succeed())
+				}
 			})
 
 			It("executes the plugin, passing the correct args", func() {
@@ -277,7 +374,7 @@ var _ = FDescribe("Image Plugin", func() {
 					testImagePluginBin,
 					"--image-path", tmpDir,
 					"--args-path", filepath.Join(tmpDir, "args"),
-					"--whoami-path", filepath.Join(tmpDir, "whoami"),
+					"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
 					"create",
 					os.Getenv("GARDEN_TEST_ROOTFS"),
 					handle,
@@ -285,7 +382,7 @@ var _ = FDescribe("Image Plugin", func() {
 			})
 
 			It("executes the plugin as the correct user", func() {
-				whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "whoami"))
+				whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "create-whoami"))
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(string(whoamiBytes)).To(ContainSubstring("0 - 0"))
@@ -393,6 +490,55 @@ var _ = FDescribe("Image Plugin", func() {
 						Expect(err).ToNot(HaveOccurred())
 
 						Expect(string(pluginArgsBytes)).To(ContainSubstring("--exclude-image-from-quota"))
+					})
+				})
+			})
+
+			Context("and that container is destroyed", func() {
+				BeforeEach(func() {
+					destroyContainer = false
+
+					args = append(args,
+						"--privileged-image-plugin-extra-arg", "\"--destroy-whoami-path\"",
+						"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "destroy-whoami"))
+				})
+
+				JustBeforeEach(func() {
+					Expect(client.Destroy(container.Handle())).Should(Succeed())
+				})
+
+				It("executes the plugin, passing the correct args", func() {
+					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+					Expect(err).ToNot(HaveOccurred())
+
+					pluginArgs := strings.Split(string(pluginArgsBytes), " ")
+					Expect(pluginArgs).To(Equal([]string{
+						testImagePluginBin,
+						"--image-path", tmpDir,
+						"--args-path", filepath.Join(tmpDir, "args"),
+						"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
+						"--destroy-whoami-path", filepath.Join(tmpDir, "destroy-whoami"),
+						"delete",
+						handle,
+					}))
+				})
+
+				It("executes the plugin as the correct user", func() {
+					whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "destroy-whoami"))
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(string(whoamiBytes)).To(ContainSubstring("0 - 0"))
+				})
+
+				Context("when the plugin logs to stderr", func() {
+					BeforeEach(func() {
+						args = append(args,
+							"--privileged-image-plugin-extra-arg", "\"--destroy-log-content\"",
+							"--privileged-image-plugin-extra-arg", "DESTROY-FAKE-LOG-LINE")
+					})
+
+					It("relogs the plugin's stderr to the garden logs", func() {
+						Eventually(client).Should(gbytes.Say("DESTROY-FAKE-LOG-LINE"))
 					})
 				})
 			})

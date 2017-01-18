@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"code.cloudfoundry.org/lager"
+
 	"github.com/urfave/cli"
 )
 
@@ -26,17 +28,30 @@ func main() {
 			Usage: "Path to write args to",
 		},
 		cli.StringFlag{
-			Name:  "whoami-path",
-			Usage: "Path to write uid/gid to",
+			Name:  "create-whoami-path",
+			Usage: "Path to write uid/gid to on create",
+		},
+		cli.StringFlag{
+			Name:  "destroy-whoami-path",
+			Usage: "Path to write uid/gid on destroy",
 		},
 		cli.StringFlag{
 			Name:  "json-file-to-copy",
 			Usage: "Path to json file to opy as image.json",
 		},
+		cli.StringFlag{
+			Name:  "create-log-content",
+			Usage: "Fake log content to write to stderr on create",
+		},
+		cli.StringFlag{
+			Name:  "destroy-log-content",
+			Usage: "Fake log content to write to stderr on destroy",
+		},
 	}
 
 	fakeImagePlugin.Commands = []cli.Command{
 		CreateCommand,
+		DeleteCommand,
 	}
 
 	_ = fakeImagePlugin.Run(os.Args)
@@ -65,30 +80,75 @@ var CreateCommand = cli.Command{
 
 	Action: func(ctx *cli.Context) error {
 		argsFile := ctx.GlobalString("args-path")
-		err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
-		if err != nil {
-			panic(err)
-		}
-
-		whoamiFile := ctx.GlobalString("whoami-path")
-		err = ioutil.WriteFile(whoamiFile, []byte(fmt.Sprintf("%d - %d", os.Getuid(), os.Getgid())), 0777)
-		if err != nil {
-			panic(err)
-		}
-
-		imagePath := ctx.GlobalString("image-path")
-		rootFSPath := filepath.Join(imagePath, "rootfs")
-		if err := os.MkdirAll(rootFSPath, 0777); err != nil {
-			panic(err)
-		}
-
-		if ctx.GlobalString("json-file-to-copy") != "" {
-			if err := copyFile(ctx.GlobalString("json-file-to-copy"), filepath.Join(imagePath, "image.json")); err != nil {
+		if argsFile != "" {
+			err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
+			if err != nil {
 				panic(err)
 			}
 		}
 
+		whoamiFile := ctx.GlobalString("create-whoami-path")
+		if whoamiFile != "" {
+			err := ioutil.WriteFile(whoamiFile, []byte(fmt.Sprintf("%d - %d", os.Getuid(), os.Getgid())), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		imagePath := ctx.GlobalString("image-path")
+		if imagePath != "" {
+			rootFSPath := filepath.Join(imagePath, "rootfs")
+			if err := os.MkdirAll(rootFSPath, 0777); err != nil {
+				panic(err)
+			}
+		}
+
+		jsonFile := ctx.GlobalString("json-file-to-copy")
+		if jsonFile != "" {
+			if err := copyFile(jsonFile, filepath.Join(imagePath, "image.json")); err != nil {
+				panic(err)
+			}
+		}
+
+		logContent := ctx.GlobalString("create-log-content")
+		if logContent != "" {
+			log := lager.NewLogger("fake-image-plugin")
+			log.RegisterSink(lager.NewWriterSink(os.Stderr, lager.INFO))
+			log.Info(logContent)
+		}
+
 		fmt.Println(imagePath)
+
+		return nil
+	},
+}
+
+var DeleteCommand = cli.Command{
+	Name: "delete",
+
+	Action: func(ctx *cli.Context) error {
+		argsFile := ctx.GlobalString("args-path")
+		if argsFile != "" {
+			err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		whoamiFile := ctx.GlobalString("destroy-whoami-path")
+		if whoamiFile != "" {
+			err := ioutil.WriteFile(whoamiFile, []byte(fmt.Sprintf("%d - %d", os.Getuid(), os.Getgid())), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		logContent := ctx.GlobalString("destroy-log-content")
+		if logContent != "" {
+			log := lager.NewLogger("fake-image-plugin")
+			log.RegisterSink(lager.NewWriterSink(os.Stderr, lager.INFO))
+			log.Info(logContent)
+		}
 
 		return nil
 	},

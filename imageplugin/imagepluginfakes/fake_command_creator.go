@@ -21,7 +21,7 @@ type FakeCommandCreator struct {
 	createCommandReturns struct {
 		result1 *exec.Cmd
 	}
-	DestroyCommandStub        func(log lager.Logger, handle string) (*exec.Cmd, error)
+	DestroyCommandStub        func(log lager.Logger, handle string) *exec.Cmd
 	destroyCommandMutex       sync.RWMutex
 	destroyCommandArgsForCall []struct {
 		log    lager.Logger
@@ -29,9 +29,8 @@ type FakeCommandCreator struct {
 	}
 	destroyCommandReturns struct {
 		result1 *exec.Cmd
-		result2 error
 	}
-	MetricsCommandStub        func(log lager.Logger, handle string) (*exec.Cmd, error)
+	MetricsCommandStub        func(log lager.Logger, handle string) *exec.Cmd
 	metricsCommandMutex       sync.RWMutex
 	metricsCommandArgsForCall []struct {
 		log    lager.Logger
@@ -39,16 +38,14 @@ type FakeCommandCreator struct {
 	}
 	metricsCommandReturns struct {
 		result1 *exec.Cmd
-		result2 error
 	}
-	GCCommandStub        func(log lager.Logger) (*exec.Cmd, error)
+	GCCommandStub        func(log lager.Logger) *exec.Cmd
 	gCCommandMutex       sync.RWMutex
 	gCCommandArgsForCall []struct {
 		log lager.Logger
 	}
 	gCCommandReturns struct {
 		result1 *exec.Cmd
-		result2 error
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
@@ -89,7 +86,7 @@ func (fake *FakeCommandCreator) CreateCommandReturns(result1 *exec.Cmd) {
 	}{result1}
 }
 
-func (fake *FakeCommandCreator) DestroyCommand(log lager.Logger, handle string) (*exec.Cmd, error) {
+func (fake *FakeCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
 	fake.destroyCommandMutex.Lock()
 	fake.destroyCommandArgsForCall = append(fake.destroyCommandArgsForCall, struct {
 		log    lager.Logger
@@ -100,7 +97,7 @@ func (fake *FakeCommandCreator) DestroyCommand(log lager.Logger, handle string) 
 	if fake.DestroyCommandStub != nil {
 		return fake.DestroyCommandStub(log, handle)
 	} else {
-		return fake.destroyCommandReturns.result1, fake.destroyCommandReturns.result2
+		return fake.destroyCommandReturns.result1
 	}
 }
 
@@ -116,15 +113,14 @@ func (fake *FakeCommandCreator) DestroyCommandArgsForCall(i int) (lager.Logger, 
 	return fake.destroyCommandArgsForCall[i].log, fake.destroyCommandArgsForCall[i].handle
 }
 
-func (fake *FakeCommandCreator) DestroyCommandReturns(result1 *exec.Cmd, result2 error) {
+func (fake *FakeCommandCreator) DestroyCommandReturns(result1 *exec.Cmd) {
 	fake.DestroyCommandStub = nil
 	fake.destroyCommandReturns = struct {
 		result1 *exec.Cmd
-		result2 error
-	}{result1, result2}
+	}{result1}
 }
 
-func (fake *FakeCommandCreator) MetricsCommand(log lager.Logger, handle string) (*exec.Cmd, error) {
+func (fake *FakeCommandCreator) MetricsCommand(log lager.Logger, handle string) *exec.Cmd {
 	fake.metricsCommandMutex.Lock()
 	fake.metricsCommandArgsForCall = append(fake.metricsCommandArgsForCall, struct {
 		log    lager.Logger
@@ -135,7 +131,7 @@ func (fake *FakeCommandCreator) MetricsCommand(log lager.Logger, handle string) 
 	if fake.MetricsCommandStub != nil {
 		return fake.MetricsCommandStub(log, handle)
 	} else {
-		return fake.metricsCommandReturns.result1, fake.metricsCommandReturns.result2
+		return fake.metricsCommandReturns.result1
 	}
 }
 
@@ -151,15 +147,14 @@ func (fake *FakeCommandCreator) MetricsCommandArgsForCall(i int) (lager.Logger, 
 	return fake.metricsCommandArgsForCall[i].log, fake.metricsCommandArgsForCall[i].handle
 }
 
-func (fake *FakeCommandCreator) MetricsCommandReturns(result1 *exec.Cmd, result2 error) {
+func (fake *FakeCommandCreator) MetricsCommandReturns(result1 *exec.Cmd) {
 	fake.MetricsCommandStub = nil
 	fake.metricsCommandReturns = struct {
 		result1 *exec.Cmd
-		result2 error
-	}{result1, result2}
+	}{result1}
 }
 
-func (fake *FakeCommandCreator) GCCommand(log lager.Logger) (*exec.Cmd, error) {
+func (fake *FakeCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {
 	fake.gCCommandMutex.Lock()
 	fake.gCCommandArgsForCall = append(fake.gCCommandArgsForCall, struct {
 		log lager.Logger
@@ -169,7 +164,7 @@ func (fake *FakeCommandCreator) GCCommand(log lager.Logger) (*exec.Cmd, error) {
 	if fake.GCCommandStub != nil {
 		return fake.GCCommandStub(log)
 	} else {
-		return fake.gCCommandReturns.result1, fake.gCCommandReturns.result2
+		return fake.gCCommandReturns.result1
 	}
 }
 
@@ -185,12 +180,11 @@ func (fake *FakeCommandCreator) GCCommandArgsForCall(i int) lager.Logger {
 	return fake.gCCommandArgsForCall[i].log
 }
 
-func (fake *FakeCommandCreator) GCCommandReturns(result1 *exec.Cmd, result2 error) {
+func (fake *FakeCommandCreator) GCCommandReturns(result1 *exec.Cmd) {
 	fake.GCCommandStub = nil
 	fake.gCCommandReturns = struct {
 		result1 *exec.Cmd
-		result2 error
-	}{result1, result2}
+	}{result1}
 }
 
 func (fake *FakeCommandCreator) Invocations() map[string][][]interface{} {

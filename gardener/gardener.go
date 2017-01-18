@@ -135,6 +135,9 @@ type ActualContainerSpec struct {
 
 	// Applied limits
 	Limits garden.Limits
+
+	// Whether the container is privileged
+	Privileged bool
 }
 
 type ActualContainerMetrics struct {
@@ -313,10 +316,10 @@ func (g *Gardener) Destroy(handle string) error {
 
 // destroy idempotently destroys any resources associated with the given handle
 func (g *Gardener) destroy(log lager.Logger, handle string) error {
-	// actualContainerSpec, err := g.Containerizer.Info(log, handle)
-	// if err != nil {
-	// 	return err
-	// }
+	actualContainerSpec, err := g.Containerizer.Info(log, handle)
+	if err != nil {
+		return err
+	}
 
 	if err := g.Containerizer.Destroy(g.Logger, handle); err != nil {
 		return err
@@ -326,7 +329,7 @@ func (g *Gardener) destroy(log lager.Logger, handle string) error {
 		return err
 	}
 
-	if err := g.VolumeCreator.Destroy(g.Logger, handle, false); err != nil {
+	if err := g.VolumeCreator.Destroy(g.Logger, handle, !actualContainerSpec.Privileged); err != nil {
 		return err
 	}
 

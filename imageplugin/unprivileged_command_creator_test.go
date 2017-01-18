@@ -166,8 +166,48 @@ var _ = Describe("UnprivilegedCommandCreator", func() {
 			Expect(createCmd.SysProcAttr.Credential.Uid).To(Equal(idMappings[0].HostID))
 			Expect(createCmd.SysProcAttr.Credential.Gid).To(Equal(idMappings[0].HostID))
 		})
-
 	})
+
+	Describe("DestroyCommand", func() {
+		var (
+			destroyCmd *exec.Cmd
+		)
+
+		JustBeforeEach(func() {
+			destroyCmd = commandCreator.DestroyCommand(nil, "test-handle")
+			Expect(destroyCmd).NotTo(BeNil())
+		})
+
+		It("returns a command with the correct image plugin path", func() {
+			Expect(destroyCmd.Path).To(Equal(binPath))
+		})
+
+		It("returns a command with the delete action", func() {
+			Expect(destroyCmd.Args[1]).To(Equal("delete"))
+		})
+
+		It("returns a command with the provided handle as id", func() {
+			Expect(destroyCmd.Args[2]).To(Equal("test-handle"))
+		})
+
+		Context("when extra args are provided", func() {
+			BeforeEach(func() {
+				extraArgs = []string{"foo", "bar"}
+			})
+
+			It("returns a command with the extra args as global args preceeding the action", func() {
+				Expect(destroyCmd.Args[1]).To(Equal("foo"))
+				Expect(destroyCmd.Args[2]).To(Equal("bar"))
+				Expect(destroyCmd.Args[3]).To(Equal("delete"))
+			})
+		})
+
+		It("returns a command that runs as an unprivileged user", func() {
+			Expect(destroyCmd.SysProcAttr.Credential.Uid).To(Equal(idMappings[0].HostID))
+			Expect(destroyCmd.SysProcAttr.Credential.Gid).To(Equal(idMappings[0].HostID))
+		})
+	})
+
 })
 
 // import (

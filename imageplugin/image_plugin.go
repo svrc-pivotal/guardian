@@ -20,9 +20,9 @@ import (
 //go:generate counterfeiter . CommandCreator
 type CommandCreator interface {
 	CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd
-	DestroyCommand(log lager.Logger, handle string) (*exec.Cmd, error)
-	MetricsCommand(log lager.Logger, handle string) (*exec.Cmd, error)
-	GCCommand(log lager.Logger) (*exec.Cmd, error)
+	DestroyCommand(log lager.Logger, handle string) *exec.Cmd
+	MetricsCommand(log lager.Logger, handle string) *exec.Cmd
+	GCCommand(log lager.Logger) *exec.Cmd
 }
 
 type ImagePlugin struct {
@@ -88,7 +88,28 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 	return rootfsPath, envVars, nil
 }
 
-func (p *ImagePlugin) Destroy(log lager.Logger, handle string, privileged bool) error {
+func (p *ImagePlugin) Destroy(log lager.Logger, handle string, namespaced bool) error {
+	log = log.Session("image-plugin-destroy")
+	log.Debug("start")
+	defer log.Debug("end")
+
+	var destroyCmd *exec.Cmd
+	if namespaced {
+		destroyCmd = p.unprivilegedCommandCreator.DestroyCommand(log, handle)
+	} else {
+		destroyCmd = p.privilegedCommandCreator.DestroyCommand(log, handle)
+	}
+
+	stdoutBuffer := bytes.NewBuffer([]byte{})
+	destroyCmd.Stdout = stdoutBuffer
+	destroyCmd.Stderr = lagregator.NewRelogger(log)
+
+	if err := p.commandRunner.Run(destroyCmd); err != nil {
+		logData := lager.Data{"action": "destroy", "stdout": stdoutBuffer.String()}
+		log.Error("image-plugin-result", err, logData)
+		return errorwrapper.Wrapf(err, "running image plugin destroy: %s", stdoutBuffer.String())
+	}
+
 	return nil
 }
 
