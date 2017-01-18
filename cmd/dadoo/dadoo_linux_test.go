@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -71,6 +72,7 @@ var _ = Describe("Dadoo", func() {
 	AfterEach(func() {
 		// Note: We're not umounting the tmpfs here as it can cause a bug in AUFS
 		// to surface and lock up the VM running the test
+		syscall.Unmount(bundlePath, 0x2)
 		os.RemoveAll(filepath.Join(bundlePath, "root"))
 		os.RemoveAll(bundlePath)
 	})
@@ -81,21 +83,22 @@ var _ = Describe("Dadoo", func() {
 		)
 
 		BeforeEach(func() {
-			bundle = bundle.WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "sleep 5 &"}, Cwd: "/"})
+			bundle = bundle.WithProcess(specs.Process{Args: []string{"/bin/sh", "-c", "sleep 15 &"}, Cwd: "/"})
 			processDir = filepath.Join(bundlePath, "processes", "abc")
 			Expect(os.MkdirAll(processDir, 0777)).To(Succeed())
 		})
 
 		JustBeforeEach(func() {
-			cmd := exec.Command("runc", "create", "--bundle", bundlePath, filepath.Base(bundlePath))
+			cmd := exec.Command("runc", "--log", "/tmp/create.log", "create", "--bundle", bundlePath, filepath.Base(bundlePath))
 			//outBuffer := gbytes.NewBuffer()
 			//cmd.Stdout = outBuffer
 			//cmd.Stderr = outBuffer
 			//err := cmd.Start()
 
-			out, err := cmd.CombinedOutput()
+			//out, err := cmd.CombinedOutput()
+			err := cmd.Run()
 			if 1 == 1 {
-				panic(string(out))
+				//	panic(string(out))
 			}
 			if err != nil {
 				//fmt.Println(string(outBuffer.Contents()))
@@ -402,10 +405,10 @@ var _ = Describe("Dadoo", func() {
 			})
 
 			Context("when defining the window size", func() {
-				FIt("should set initial window size", func(done Done) {
+				It("should set initial window size", func(done Done) {
 					spec := specs.Process{
 						Args: []string{
-							"/bin/sh", "-c", `stty -a`,
+							"/bin/sh", "-c", `stty -a; stty -a`,
 						},
 						Cwd:      "/",
 						Terminal: true,
@@ -418,7 +421,7 @@ var _ = Describe("Dadoo", func() {
 					encSpec, err := json.Marshal(spec)
 					Expect(err).NotTo(HaveOccurred())
 
-					cmd := exec.Command(dadooBinPath, "-uid", "1", "-gid", "1", "-tty", "-rows", "17", "-cols", "13", "exec", "runc", processDir, filepath.Base(bundlePath))
+					cmd := exec.Command(dadooBinPath, "-uid", "1", "-gid", "1", "-tty", "exec", "runc", processDir, filepath.Base(bundlePath))
 					cmd.ExtraFiles = []*os.File{mustOpen("/dev/null"), mustOpen("/dev/null")}
 					cmd.Stdin = bytes.NewReader(encSpec)
 
@@ -439,7 +442,8 @@ var _ = Describe("Dadoo", func() {
 
 					data, err := ioutil.ReadAll(stdout)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(string(data)).To(ContainSubstring("rows 17; columns 13;"))
+					str := string(data)
+					Expect(strings.Count(str, "rows 17; columns 13;")).To(Equal(2))
 
 					close(done)
 				}, 10.0)
