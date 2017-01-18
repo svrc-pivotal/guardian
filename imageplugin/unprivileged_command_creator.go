@@ -63,34 +63,14 @@ func (p *UnprivilegedCommandCreator) DestroyCommand(log lager.Logger, handle str
 }
 
 func (p *UnprivilegedCommandCreator) MetricsCommand(log lager.Logger, handle string) *exec.Cmd {
-	log = log.Session("image-plugin-metrics", lager.Data{"handle": handle})
-	log.Debug("start")
-	defer log.Debug("end")
-
-	// imagePath := filepath.Dir(rootfs)
-	// args := append(p.extraArgs, "stats", imagePath)
-	// cmd := exec.Command(p.binPath, args...)
-	// cmd.Stderr = lagregator.NewRelogger(log)
-	// outBuffer := bytes.NewBuffer([]byte{})
-	// cmd.Stdout = outBuffer
-
-	// if err := p.commandRunner.Run(cmd); err != nil {
-	// 	logData := lager.Data{"action": "stats", "stderr": outBuffer.String()}
-	// 	log.Error("external-image-manager-result", err, logData)
-	// 	return garden.ContainerDiskStat{}, fmt.Errorf("external image manager metrics failed: %s (%s)", outBuffer.String(), err)
-	// }
-
-	// var metrics map[string]map[string]uint64
-	// if err := json.NewDecoder(outBuffer).Decode(&metrics); err != nil {
-	// 	return garden.ContainerDiskStat{}, fmt.Errorf("parsing metrics: %s", err)
-	// }
-
-	// return garden.ContainerDiskStat{
-	// 	TotalBytesUsed:     metrics["disk_usage"]["total_bytes_used"],
-	// 	ExclusiveBytesUsed: metrics["disk_usage"]["exclusive_bytes_used"],
-	// }, nil
-	//
-	return nil
+	cmd := exec.Command(p.BinPath, append(p.ExtraArgs, "stats", handle)...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: p.IDMappings[0].HostID,
+			Gid: p.IDMappings[0].HostID,
+		},
+	}
+	return cmd
 }
 
 func (p *UnprivilegedCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {

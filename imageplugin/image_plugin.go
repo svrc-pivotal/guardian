@@ -113,7 +113,29 @@ func (p *ImagePlugin) Destroy(log lager.Logger, handle string, namespaced bool) 
 	return nil
 }
 
-func (p *ImagePlugin) Metrics(log lager.Logger, handle string, privileged bool) (garden.ContainerDiskStat, error) {
+func (p *ImagePlugin) Metrics(log lager.Logger, handle string, namespaced bool) (garden.ContainerDiskStat, error) {
+	log = log.Session("image-plugin-metrics")
+	log.Debug("start")
+	defer log.Debug("end")
+
+	var metricsCmd *exec.Cmd
+	if namespaced {
+		metricsCmd = p.unprivilegedCommandCreator.MetricsCommand(log, handle)
+	} else {
+		metricsCmd = p.privilegedCommandCreator.MetricsCommand(log, handle)
+	}
+
+	stdoutBuffer := bytes.NewBuffer([]byte{})
+	metricsCmd.Stdout = stdoutBuffer
+	metricsCmd.Stderr = lagregator.NewRelogger(log)
+
+	if err := p.commandRunner.Run(metricsCmd); err != nil {
+		logData := lager.Data{"action": "metrics", "stdout": stdoutBuffer.String()}
+		log.Error("image-plugin-result", err, logData)
+		return garden.ContainerDiskStat{}, errorwrapper.Wrapf(err, "running image plugin metrics: %s", stdoutBuffer.String())
+	}
+
+	// Test that metrics are actually consumed
 	return garden.ContainerDiskStat{}, nil
 }
 

@@ -36,6 +36,10 @@ func main() {
 			Usage: "Path to write uid/gid on destroy",
 		},
 		cli.StringFlag{
+			Name:  "metrics-whoami-path",
+			Usage: "Path to write uid/gid on metrics",
+		},
+		cli.StringFlag{
 			Name:  "json-file-to-copy",
 			Usage: "Path to json file to opy as image.json",
 		},
@@ -47,11 +51,16 @@ func main() {
 			Name:  "destroy-log-content",
 			Usage: "Fake log content to write to stderr on destroy",
 		},
+		cli.StringFlag{
+			Name:  "metrics-log-content",
+			Usage: "Fake log content to write to stderr on metrics",
+		},
 	}
 
 	fakeImagePlugin.Commands = []cli.Command{
 		CreateCommand,
 		DeleteCommand,
+		StatsCommand,
 	}
 
 	_ = fakeImagePlugin.Run(os.Args)
@@ -144,6 +153,37 @@ var DeleteCommand = cli.Command{
 		}
 
 		logContent := ctx.GlobalString("destroy-log-content")
+		if logContent != "" {
+			log := lager.NewLogger("fake-image-plugin")
+			log.RegisterSink(lager.NewWriterSink(os.Stderr, lager.INFO))
+			log.Info(logContent)
+		}
+
+		return nil
+	},
+}
+
+var StatsCommand = cli.Command{
+	Name: "stats",
+
+	Action: func(ctx *cli.Context) error {
+		argsFile := ctx.GlobalString("args-path")
+		if argsFile != "" {
+			err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		whoamiFile := ctx.GlobalString("metrics-whoami-path")
+		if whoamiFile != "" {
+			err := ioutil.WriteFile(whoamiFile, []byte(fmt.Sprintf("%d - %d", os.Getuid(), os.Getgid())), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		logContent := ctx.GlobalString("metrics-log-content")
 		if logContent != "" {
 			log := lager.NewLogger("fake-image-plugin")
 			log.RegisterSink(lager.NewWriterSink(os.Stderr, lager.INFO))

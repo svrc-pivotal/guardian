@@ -148,12 +148,12 @@ func (c *container) Metrics() (garden.Metrics, error) {
 		return garden.Metrics{}, err
 	}
 
-	// actualContainerSpec, err := c.containerizer.Info(c.logger, c.handle)
-	// if err != nil {
-	// 	return garden.Metrics{}, err
-	// }
+	actualContainerSpec, err := c.containerizer.Info(c.logger, c.handle)
+	if err != nil {
+		return garden.Metrics{}, err
+	}
 
-	diskMetrics, err := c.volumeCreator.Metrics(c.logger, c.handle, false)
+	diskMetrics, err := c.volumeCreator.Metrics(c.logger, c.handle, !actualContainerSpec.Privileged)
 	if err != nil {
 		return garden.Metrics{}, err
 	}

@@ -956,7 +956,6 @@ var _ = Describe("Gardener", func() {
 				err := gdnr.Destroy("some-handle")
 				Expect(err).To(MatchError("info-failed"))
 			})
-
 		})
 	})
 
@@ -1350,18 +1349,42 @@ var _ = Describe("Gardener", func() {
 			Expect(metrics.DiskStat).To(Equal(diskStat))
 		})
 
+		It("should request disk metrics, informing that the volume is namespaced", func() {
+			_, err := container.Metrics()
+			Expect(err).NotTo(HaveOccurred())
+
+			_, _, namespaced := volumeCreator.MetricsArgsForCall(0)
+			Expect(namespaced).To(BeTrue())
+		})
+
+		Context("when the container is privileged", func() {
+			BeforeEach(func() {
+				containerizer.InfoReturns(gardener.ActualContainerSpec{
+					Privileged: true,
+				}, nil)
+			})
+
+			It("should return the disk metrics from the volumizer, informing that the volume is not namepsaced", func() {
+				_, err := container.Metrics()
+				Expect(err).NotTo(HaveOccurred())
+
+				_, _, namespaced := volumeCreator.MetricsArgsForCall(0)
+				Expect(namespaced).To(BeFalse())
+			})
+		})
+
 		Context("when cpu/mem metrics cannot be acquired", func() {
 			BeforeEach(func() {
 				containerizer.MetricsReturns(gardener.ActualContainerMetrics{}, errors.New("banana"))
 			})
 
-			It("should propagete the error", func() {
+			It("should propagate the error", func() {
 				_, err := container.Metrics()
 				Expect(err).To(MatchError("banana"))
 			})
 		})
 
-		PContext("when info returns an error", func() {
+		Context("when info returns an error", func() {
 			BeforeEach(func() {
 				containerizer.InfoReturns(gardener.ActualContainerSpec{}, errors.New("banana"))
 			})
@@ -1377,7 +1400,7 @@ var _ = Describe("Gardener", func() {
 				volumeCreator.MetricsReturns(garden.ContainerDiskStat{}, errors.New("banana"))
 			})
 
-			It("should propagete the error", func() {
+			It("should propagate the error", func() {
 				_, err := container.Metrics()
 				Expect(err).To(MatchError("banana"))
 			})

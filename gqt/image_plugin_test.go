@@ -241,7 +241,18 @@ var _ = FDescribe("Image Plugin", func() {
 				})
 			})
 
-			PContext("and metrics are collected on that containers", func() {
+			Context("and metrics are collected on that containers", func() {
+				BeforeEach(func() {
+					args = append(args,
+						"--image-plugin-extra-arg", "\"--metrics-whoami-path\"",
+						"--image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-whoami"))
+				})
+
+				JustBeforeEach(func() {
+					_, err := container.Metrics()
+					Expect(err).NotTo(HaveOccurred())
+				})
+
 				It("executes the plugin, passing the correct args", func() {
 					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
 					Expect(err).ToNot(HaveOccurred())
@@ -251,10 +262,32 @@ var _ = FDescribe("Image Plugin", func() {
 						testImagePluginBin,
 						"--image-path", tmpDir,
 						"--args-path", filepath.Join(tmpDir, "args"),
-						"--whoami-path", filepath.Join(tmpDir, "whoami"),
+						"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
+						"--metrics-whoami-path", filepath.Join(tmpDir, "metrics-whoami"),
 						"stats",
 						handle,
 					}))
+				})
+
+				It("executes the plugin as the correct user", func() {
+					maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
+
+					whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "metrics-whoami"))
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(string(whoamiBytes)).To(ContainSubstring(fmt.Sprintf("%d - %d", maxId, maxId)))
+				})
+
+				Context("when the plugin logs to stderr", func() {
+					BeforeEach(func() {
+						args = append(args,
+							"--image-plugin-extra-arg", "\"--metrics-log-content\"",
+							"--image-plugin-extra-arg", "METRICS-FAKE-LOG-LINE")
+					})
+
+					It("relogs the plugin's stderr to the garden logs", func() {
+						Eventually(client).Should(gbytes.Say("METRICS-FAKE-LOG-LINE"))
+					})
 				})
 			})
 

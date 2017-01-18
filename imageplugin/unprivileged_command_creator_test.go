@@ -208,6 +208,46 @@ var _ = Describe("UnprivilegedCommandCreator", func() {
 		})
 	})
 
+	Describe("MetricsCommand", func() {
+		var (
+			metricsCmd *exec.Cmd
+		)
+
+		JustBeforeEach(func() {
+			metricsCmd = commandCreator.MetricsCommand(nil, "test-handle")
+			Expect(metricsCmd).NotTo(BeNil())
+		})
+
+		It("returns a command with the correct image plugin path", func() {
+			Expect(metricsCmd.Path).To(Equal(binPath))
+		})
+
+		It("returns a command with the delete action", func() {
+			Expect(metricsCmd.Args[1]).To(Equal("stats"))
+		})
+
+		It("returns a command with the provided handle as id", func() {
+			Expect(metricsCmd.Args[2]).To(Equal("test-handle"))
+		})
+
+		Context("when extra args are provided", func() {
+			BeforeEach(func() {
+				extraArgs = []string{"foo", "bar"}
+			})
+
+			It("returns a command with the extra args as global args preceeding the action", func() {
+				Expect(metricsCmd.Args[1]).To(Equal("foo"))
+				Expect(metricsCmd.Args[2]).To(Equal("bar"))
+				Expect(metricsCmd.Args[3]).To(Equal("stats"))
+			})
+		})
+
+		It("returns a command that runs as an unprivileged user", func() {
+			Expect(metricsCmd.SysProcAttr.Credential.Uid).To(Equal(idMappings[0].HostID))
+			Expect(metricsCmd.SysProcAttr.Credential.Gid).To(Equal(idMappings[0].HostID))
+		})
+	})
+
 })
 
 // import (

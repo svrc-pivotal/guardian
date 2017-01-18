@@ -306,7 +306,7 @@ var _ = Describe("ImagePlugin", func() {
 
 		It("calls the unprivileged command creator to generate a destroy command", func() {
 			Expect(destroyErr).NotTo(HaveOccurred())
-			Expect(fakePrivilegedCommandCreator.CreateCommandCallCount()).To(Equal(0))
+			Expect(fakePrivilegedCommandCreator.DestroyCommandCallCount()).To(Equal(0))
 			Expect(fakeUnprivilegedCommandCreator.DestroyCommandCallCount()).To(Equal(1))
 
 			_, handleArg := fakeUnprivilegedCommandCreator.DestroyCommandArgsForCall(0)
@@ -369,113 +369,118 @@ var _ = Describe("ImagePlugin", func() {
 				))
 			})
 		})
+	})
 
-		// var (
-		// 	cmd *exec.Cmd
+	Describe("Metrics", func() {
+		var (
+			cmd *exec.Cmd
 
-		// 	handle     string
-		// 	namespaced bool
+			handle string
 
-		// 	fakeImagePluginStdout string
-		// 	fakeImagePluginStderr string
-		// 	fakeImagePluginError  error
+			fakeImagePluginStdout string
+			fakeImagePluginStderr string
+			fakeImagePluginError  error
 
-		// 	destroyErr error
-		// )
+			metricsErr error
 
-		// BeforeEach(func() {
-		// 	cmd = exec.Command("unpriv-plugin", "destroy")
-		// 	fakeUnprivilegedCommandCreator.DestroyCommandReturns(cmd, nil)
-		// 	fakePrivilegedCommandCreator.DestroyCommandReturns(cmd, nil)
-		// 	handle = "test-handle"
+			namespaced bool
+		)
 
-		// 	fakeImagePluginStdout = "something\n"
-		// 	fakeImagePluginStderr = ""
-		// 	fakeImagePluginError = nil
+		BeforeEach(func() {
+			cmd = exec.Command("unpriv-plugin", "metrics")
+			fakeUnprivilegedCommandCreator.MetricsCommandReturns(cmd)
+			fakePrivilegedCommandCreator.MetricsCommandReturns(cmd)
 
-		// 	destroyErr = nil
-		// 	namespaced = true
+			handle = "test-handle"
 
-		// })
+			fakeImagePluginStdout = ""
+			fakeImagePluginStderr = ""
+			fakeImagePluginError = nil
 
-		// JustBeforeEach(func() {
-		// 	fakeCommandRunner.WhenRunning(
-		// 		fake_command_runner.CommandSpec{
-		// 			Path: cmd.Path,
-		// 		},
-		// 		func(cmd *exec.Cmd) error {
-		// 			cmd.Stdout.Write([]byte(fakeImagePluginStdout))
-		// 			cmd.Stderr.Write([]byte(fakeImagePluginStderr))
-		// 			return fakeImagePluginError
-		// 		},
-		// 	)
+			namespaced = true //assume unprivileged by default
 
-		// 	destroyErr = imagePlugin.Destroy(fakeLogger, handle, namespaced)
-		// })
+			metricsErr = nil
+		})
 
-		// It("calls the plugin to generate a destroy command", func() {
-		// 	Expect(destroyErr).NotTo(HaveOccurred())
-		// 	Expect(fakeUnprivilegedCommandCreator.DestroyCommandCallCount()).To(Equal(1))
-		// 	Expect(fakePrivilegedCommandCreator.DestroyCommandCallCount()).To(Equal(0))
+		JustBeforeEach(func() {
+			fakeCommandRunner.WhenRunning(
+				fake_command_runner.CommandSpec{
+					Path: cmd.Path,
+				},
+				func(cmd *exec.Cmd) error {
+					cmd.Stdout.Write([]byte(fakeImagePluginStdout))
+					cmd.Stderr.Write([]byte(fakeImagePluginStderr))
+					return fakeImagePluginError
+				},
+			)
 
-		// 	_, handleArg := fakeUnprivilegedCommandCreator.DestroyCommandArgsForCall(0)
-		// 	Expect(handleArg).To(Equal(handle))
-		// })
+			_, metricsErr = imagePlugin.Metrics(fakeLogger, handle, namespaced)
+		})
 
-		// Context("when running with a privileged image plugin", func() {
-		// 	BeforeEach(func() {
-		// 		namespaced = false
-		// 	})
+		It("calls the unprivileged command creator to generate a destroy command", func() {
+			Expect(metricsErr).NotTo(HaveOccurred())
+			Expect(fakePrivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(0))
+			Expect(fakeUnprivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(1))
 
-		// 	It("calls the plugin to generate a create command with a privileged creator", func() {
-		// 		Expect(destroyErr).NotTo(HaveOccurred())
-		// 		Expect(fakeUnprivilegedCommandCreator.DestroyCommandCallCount()).To(Equal(0))
-		// 		Expect(fakePrivilegedCommandCreator.DestroyCommandCallCount()).To(Equal(1))
+			_, handleArg := fakeUnprivilegedCommandCreator.MetricsCommandArgsForCall(0)
+			Expect(handleArg).To(Equal(handle))
+		})
 
-		// 		_, handleArg := fakePrivilegedCommandCreator.DestroyCommandArgsForCall(0)
-		// 		Expect(handleArg).To(Equal(handle))
+		Context("when destroying an unprivileged volume", func() {
+			BeforeEach(func() {
+				namespaced = false
+			})
 
-		// 	})
-		// })
+			It("calls the privileged command creator to generate a destroy command", func() {
+				Expect(metricsErr).NotTo(HaveOccurred())
+				Expect(fakePrivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(1))
+				Expect(fakeUnprivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(0))
 
-		// // DISCUSS 1
-		// // It("returns trimmed plugin stdout concatenated with 'rootfs'", func() {
-		// // 	Expect(createRootfs).To(Equal("/image-rootfs/rootfs"))
-		// // })
+				_, handleArg := fakePrivilegedCommandCreator.MetricsCommandArgsForCall(0)
+				Expect(handleArg).To(Equal(handle))
+			})
+		})
 
-		// Context("when running the image plugin destroy fails", func() {
-		// 	BeforeEach(func() {
-		// 		fakeImagePluginStdout = "image-plugin-exploded-due-to-oom"
-		// 		fakeImagePluginError = errors.New("image-plugin-delete-failed")
-		// 	})
+		It("runs the plugin command with the command runner", func() {
+			Expect(metricsErr).NotTo(HaveOccurred())
+			Expect(fakeCommandRunner.ExecutedCommands()).To(HaveLen(1))
+			executedCmd := fakeCommandRunner.ExecutedCommands()[0]
 
-		// 	It("returns the wrapped error and plugin stdout, with context", func() {
-		// 		str := fmt.Sprintf("running image plugin destroy: %s: %s",
-		// 			fakeImagePluginStdout, fakeImagePluginError)
-		// 		Expect(destroyErr).To(MatchError(str))
-		// 	})
-		// })
+			Expect(executedCmd).To(Equal(cmd))
+		})
 
-		// Context("when the image plugin emits logs to stderr", func() {
-		// 	BeforeEach(func() {
-		// 		buffer := gbytes.NewBuffer()
-		// 		externalLogger := lager.NewLogger("external-plugin")
-		// 		externalLogger.RegisterSink(lager.NewWriterSink(buffer, lager.DEBUG))
-		// 		externalLogger.Error("error-message", errors.New("failed!"), lager.Data{"type": "error"})
+		Context("when running the image plugin destroy fails", func() {
+			BeforeEach(func() {
+				fakeImagePluginStdout = "image-plugin-exploded-due-to-oom"
+				fakeImagePluginError = errors.New("image-plugin-stats-failed")
+			})
 
-		// 		fakeImagePluginStderr = string(buffer.Contents())
-		// 	})
+			It("returns the wrapped error and plugin stdout, with context", func() {
+				str := fmt.Sprintf("running image plugin metrics: %s: %s",
+					fakeImagePluginStdout, fakeImagePluginError)
+				Expect(metricsErr).To(MatchError(str))
+			})
+		})
 
-		// 	It("relogs the log entries", func() {
-		// 		Expect(fakeLogger).To(glager.ContainSequence(
-		// 			glager.Error(
-		// 				errors.New("failed!"),
-		// 				glager.Message("image-plugin.image-plugin-destroy.external-plugin.error-message"),
-		// 				glager.Data("type", "error"),
-		// 			),
-		// 		))
-		// 	})
-		// })
+		Context("when the image plugin emits logs to stderr", func() {
+			BeforeEach(func() {
+				buffer := gbytes.NewBuffer()
+				externalLogger := lager.NewLogger("external-plugin")
+				externalLogger.RegisterSink(lager.NewWriterSink(buffer, lager.DEBUG))
+				externalLogger.Error("error-message", errors.New("failed!"), lager.Data{"type": "error"})
 
+				fakeImagePluginStderr = string(buffer.Contents())
+			})
+
+			It("relogs the log entries", func() {
+				Expect(fakeLogger).To(glager.ContainSequence(
+					glager.Error(
+						errors.New("failed!"),
+						glager.Message("image-plugin.image-plugin-metrics.external-plugin.error-message"),
+						glager.Data("type", "error"),
+					),
+				))
+			})
+		})
 	})
 })
