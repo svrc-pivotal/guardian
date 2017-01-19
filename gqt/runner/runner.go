@@ -73,7 +73,7 @@ func init() {
 	}
 }
 
-func NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin, network, address string, argv ...string) GardenRunner {
+func NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin, network, address string, user *syscall.Credential, argv ...string) GardenRunner {
 	r := GardenRunner{}
 
 	r.Network = network
@@ -90,6 +90,10 @@ func NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBi
 
 	r.Cmd = cmd(r.TmpDir, r.DepotDir, r.GraphPath, r.Network, r.Addr, bin, initBin, nstarBin, dadooBin, grootfsBin, tarBin, rootfs, argv...)
 	r.Cmd.Env = append(os.Environ(), fmt.Sprintf("TMPDIR=%s", r.TmpDir))
+	if user != nil {
+		r.Cmd.SysProcAttr = &syscall.SysProcAttr{}
+		r.Cmd.SysProcAttr.Credential = user
+	}
 
 	for i, arg := range r.Cmd.Args {
 		if arg == "--debug-bind-ip" {
@@ -111,8 +115,8 @@ func NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBi
 	return r
 }
 
-func Start(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin string, argv ...string) *RunningGarden {
-	runner := NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin, "unix", fmt.Sprintf("/tmp/garden_%d.sock", GinkgoParallelNode()), argv...)
+func Start(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin string, user *syscall.Credential, argv ...string) *RunningGarden {
+	runner := NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin, "unix", fmt.Sprintf("/tmp/garden_%d.sock", GinkgoParallelNode()), user, argv...)
 
 	r := &RunningGarden{
 		runner:   runner,

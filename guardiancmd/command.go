@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"time"
 
@@ -142,8 +143,7 @@ type GuardianCommand struct {
 		DebugBindIP   IPFlag `long:"debug-bind-ip"                   description:"Bind the debug server on the given IP."`
 		DebugBindPort uint16 `long:"debug-bind-port" default:"17013" description:"Bind the debug server to the given port."`
 
-		Tag      string `long:"tag" description:"Optional 2-character identifier used for namespacing global configuration."`
-		Rootless bool   `long:"rootless" description:"Run server in rootless mode."`
+		Tag string `long:"tag" description:"Optional 2-character identifier used for namespacing global configuration."`
 	} `group:"Server Configuration"`
 
 	Containers struct {
@@ -246,10 +246,6 @@ func (cmd *GuardianCommand) Execute([]string) error {
 func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{}) error {
 	logger, reconfigurableSink := cmd.Logger.Logger("guardian")
 
-	if cmd.Server.Rootless {
-		logger.Info("rootless-mode-on")
-	}
-
 	if err := exec.Command("modprobe", "aufs").Run(); err != nil {
 		logger.Error("unable-to-load-aufs", err)
 	}
@@ -285,11 +281,9 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 	}
 
 	var volumeCreator gardener.VolumeCreator = nil
-	starters := []gardener.Starter{}
-	if !cmd.Server.Rootless {
-		volumeCreator = cmd.wireVolumeCreator(logger, cmd.Graph.Dir.Path(), cmd.Docker.InsecureRegistries, cmd.Graph.PersistentImages)
-		starters = []gardener.Starter{cmd.wireRunDMCStarter(logger), iptablesStarter}
-	}
+	volumeCreator = cmd.wireVolumeCreator(logger, cmd.Graph.Dir.Path(), cmd.Docker.InsecureRegistries, cmd.Graph.PersistentImages)
+	starters := []gardener.Starter{cmd.wireRunDMCStarter(logger), iptablesStarter}
+	starters = []gardener.Starter{}
 
 	backend := &gardener.Gardener{
 		UidGenerator:    cmd.wireUidGenerator(),
@@ -351,6 +345,15 @@ func (cmd *GuardianCommand) Run(signals <-chan os.Signal, ready chan<- struct{})
 	ports.SaveState(cmd.Network.PortPoolPropertiesPath, portPoolState)
 
 	return nil
+}
+
+func runningAsRoot(log lager.Logger) bool {
+	usr, err := user.Current()
+	if err != nil {
+		log.Error("Cannot get currnet user. Assuming root.", err)
+		return true
+	}
+	return usr.Uid == "0"
 }
 
 func (cmd *GuardianCommand) loadProperties(logger lager.Logger, propertiesPath string) (*properties.Manager, error) {

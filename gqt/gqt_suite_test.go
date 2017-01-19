@@ -1,14 +1,17 @@
 package gqt_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gqt/runner"
+	"code.cloudfoundry.org/guardian/sysinfo"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -23,7 +26,7 @@ var defaultRuntime = map[string]string{
 
 var ginkgoIO = garden.ProcessIO{Stdout: GinkgoWriter, Stderr: GinkgoWriter}
 
-var ociRuntimeBin, gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, inspectorGardenBin, testNetPluginBin, tarBin string
+var ociRuntimeBin, gardenSetupBin, gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, inspectorGardenBin, testNetPluginBin, tarBin string
 
 func TestGqt(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -38,6 +41,9 @@ func TestGqt(t *testing.T) {
 		}
 
 		if bins["oci_runtime_path"] != "" {
+			bins["garden_setup_bin_path"], err = gexec.Build("code.cloudfoundry.org/guardian/cmd/guardian-setup")
+			Expect(err).NotTo(HaveOccurred())
+
 			bins["garden_bin_path"], err = gexec.Build("code.cloudfoundry.org/guardian/cmd/guardian", "-tags", "daemon", "-race", "-ldflags", "-extldflags '-static'")
 			Expect(err).NotTo(HaveOccurred())
 
@@ -74,6 +80,7 @@ func TestGqt(t *testing.T) {
 
 		ociRuntimeBin = bins["oci_runtime_path"]
 		gardenBin = bins["garden_bin_path"]
+		gardenSetupBin = bins["garden_setup_bin_path"]
 		nstarBin = bins["nstar_bin_path"]
 		dadooBin = bins["dadoo_bin_bin_bin"]
 		testImagePluginBin = bins["test_image_plugin_bin_path"]
@@ -106,9 +113,23 @@ func TestGqt(t *testing.T) {
 	RunSpecs(t, "GQT Suite")
 }
 
+func runGardenSetup() {
+	Expect(exec.Command(gardenSetupBin, "--tag", fmt.Sprintf("%d", GinkgoParallelNode())).Run()).To(Succeed())
+}
+
 func startGarden(argv ...string) *runner.RunningGarden {
+	runGardenSetup()
 	rootfs := os.Getenv("GARDEN_TEST_ROOTFS")
-	return runner.Start(gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, rootfs, tarBin, argv...)
+	return runner.Start(gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, rootfs, tarBin, nil, argv...)
+}
+
+func startGardenRootless(argv ...string) *runner.RunningGarden {
+	runGardenSetup()
+	rootfs := os.Getenv("GARDEN_TEST_ROOTFS")
+	maxId := uint32(sysinfo.Min(sysinfo.MustGetMaxValidUID(), sysinfo.MustGetMaxValidGID()))
+	maximus := &syscall.Credential{Uid: maxId, Gid: maxId}
+
+	return runner.Start(gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, rootfs, tarBin, maximus, argv...)
 }
 
 func restartGarden(client *runner.RunningGarden, argv ...string) {
@@ -118,5 +139,5 @@ func restartGarden(client *runner.RunningGarden, argv ...string) {
 }
 
 func startGardenWithoutDefaultRootfs(argv ...string) *runner.RunningGarden {
-	return runner.Start(gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, "", tarBin, argv...)
+	return runner.Start(gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, "", tarBin, nil, argv...)
 }
