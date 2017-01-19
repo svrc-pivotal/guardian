@@ -450,20 +450,19 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 	}
 
 	if cmd.Image.Plugin.Path() != "" || cmd.Image.PrivilegedPlugin.Path() != "" {
-		return imageplugin.New(
+		return &imageplugin.ImagePlugin{
 			&imageplugin.UnprivilegedCommandCreator{
 				BinPath:    cmd.Image.Plugin.Path(),
 				ExtraArgs:  cmd.Image.PluginExtraArgs,
 				IDMappings: idMappings,
 			},
 			&imageplugin.PrivilegedCommandCreator{
-				BinPath:    cmd.Image.PrivilegedPlugin.Path(),
-				ExtraArgs:  cmd.Image.PrivilegedPluginExtraArgs,
-				IDMappings: idMappings,
+				BinPath:   cmd.Image.PrivilegedPlugin.Path(),
+				ExtraArgs: cmd.Image.PrivilegedPluginExtraArgs,
 			},
 			linux_command_runner.New(),
 			cmd.Containers.DefaultRootFS,
-		)
+		}
 	}
 
 	logger = logger.Session("volume-creator", lager.Data{"graphRoot": graphRoot})

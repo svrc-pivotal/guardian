@@ -27,24 +27,24 @@ type CommandCreator interface {
 }
 
 type ImagePlugin struct {
-	unprivilegedCommandCreator CommandCreator
-	privilegedCommandCreator   CommandCreator
-	commandRunner              command_runner.CommandRunner
-	defaultRootfs              string
+	UnprivilegedCommandCreator CommandCreator
+	PrivilegedCommandCreator   CommandCreator
+	CommandRunner              command_runner.CommandRunner
+	DefaultRootfs              string
 }
 
-func New(unprivilegedCommandCreator CommandCreator,
-	privilegedCommandCreator CommandCreator,
-	commandRunner command_runner.CommandRunner,
-	defaultRootfs string) *ImagePlugin {
+// func New(UnprivilegedCommandCreator CommandCreator,
+// 	PrivilegedCommandCreator CommandCreator,
+// 	CommandRunner command_runner.CommandRunner,
+// 	DefaultRootfs string) ImagePlugin {
 
-	return &ImagePlugin{
-		unprivilegedCommandCreator: unprivilegedCommandCreator,
-		privilegedCommandCreator:   privilegedCommandCreator,
-		commandRunner:              commandRunner,
-		defaultRootfs:              defaultRootfs,
-	}
-}
+// 	return ImagePlugin{
+// 		UnprivilegedCommandCreator: UnprivilegedCommandCreator,
+// 		PrivilegedCommandCreator:   PrivilegedCommandCreator,
+// 		CommandRunner:              CommandRunner,
+// 		DefaultRootfs:              DefaultRootfs,
+// 	}
+// }
 
 func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
 	log = log.Session("image-plugin-create")
@@ -53,7 +53,7 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 
 	if spec.RootFS.String() == "" {
 		var err error
-		spec.RootFS, err = url.Parse(p.defaultRootfs)
+		spec.RootFS, err = url.Parse(p.DefaultRootfs)
 
 		if err != nil {
 			log.Error("parsing-default-rootfs-failed", err)
@@ -63,18 +63,18 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 
 	var createCmd *exec.Cmd
 	if spec.Namespaced {
-		if p.unprivilegedCommandCreator == (CommandCreator)(nil) {
+		if p.UnprivilegedCommandCreator == nil {
 			return "", nil, errors.New("no image_plugin provided")
 		}
-		createCmd = p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
+		createCmd = p.UnprivilegedCommandCreator.CreateCommand(log, handle, spec)
 	} else {
-		createCmd = p.privilegedCommandCreator.CreateCommand(log, handle, spec)
+		createCmd = p.PrivilegedCommandCreator.CreateCommand(log, handle, spec)
 	}
 	stdoutBuffer := bytes.NewBuffer([]byte{})
 	createCmd.Stdout = stdoutBuffer
 	createCmd.Stderr = lagregator.NewRelogger(log)
 
-	if err := p.commandRunner.Run(createCmd); err != nil {
+	if err := p.CommandRunner.Run(createCmd); err != nil {
 		logData := lager.Data{"action": "create", "stdout": stdoutBuffer.String()}
 		log.Error("image-plugin-result", err, logData)
 		return "", nil, errorwrapper.Wrapf(err, "running image plugin create: %s", stdoutBuffer.String())
@@ -99,16 +99,16 @@ func (p *ImagePlugin) Destroy(log lager.Logger, handle string, namespaced bool) 
 
 	var destroyCmd *exec.Cmd
 	if namespaced {
-		destroyCmd = p.unprivilegedCommandCreator.DestroyCommand(log, handle)
+		destroyCmd = p.UnprivilegedCommandCreator.DestroyCommand(log, handle)
 	} else {
-		destroyCmd = p.privilegedCommandCreator.DestroyCommand(log, handle)
+		destroyCmd = p.PrivilegedCommandCreator.DestroyCommand(log, handle)
 	}
 
 	stdoutBuffer := bytes.NewBuffer([]byte{})
 	destroyCmd.Stdout = stdoutBuffer
 	destroyCmd.Stderr = lagregator.NewRelogger(log)
 
-	if err := p.commandRunner.Run(destroyCmd); err != nil {
+	if err := p.CommandRunner.Run(destroyCmd); err != nil {
 		logData := lager.Data{"action": "destroy", "stdout": stdoutBuffer.String()}
 		log.Error("image-plugin-result", err, logData)
 		return errorwrapper.Wrapf(err, "running image plugin destroy: %s", stdoutBuffer.String())
@@ -124,16 +124,16 @@ func (p *ImagePlugin) Metrics(log lager.Logger, handle string, namespaced bool) 
 
 	var metricsCmd *exec.Cmd
 	if namespaced {
-		metricsCmd = p.unprivilegedCommandCreator.MetricsCommand(log, handle)
+		metricsCmd = p.UnprivilegedCommandCreator.MetricsCommand(log, handle)
 	} else {
-		metricsCmd = p.privilegedCommandCreator.MetricsCommand(log, handle)
+		metricsCmd = p.PrivilegedCommandCreator.MetricsCommand(log, handle)
 	}
 
 	stdoutBuffer := bytes.NewBuffer([]byte{})
 	metricsCmd.Stdout = stdoutBuffer
 	metricsCmd.Stderr = lagregator.NewRelogger(log)
 
-	if err := p.commandRunner.Run(metricsCmd); err != nil {
+	if err := p.CommandRunner.Run(metricsCmd); err != nil {
 		logData := lager.Data{"action": "metrics", "stdout": stdoutBuffer.String()}
 		log.Error("image-plugin-result", err, logData)
 		return garden.ContainerDiskStat{}, errorwrapper.Wrapf(err, "running image plugin metrics: %s", stdoutBuffer.String())

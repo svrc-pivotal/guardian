@@ -174,6 +174,11 @@ var _ = Describe("PrivilegedCommandCreator", func() {
 				Expect(destroyCmd.Args[3]).To(Equal("delete"))
 			})
 		})
+
+		It("returns a command that runs as a privileged user", func() {
+			Expect(destroyCmd.SysProcAttr.Credential.Uid).To(Equal(uint32(0)))
+			Expect(destroyCmd.SysProcAttr.Credential.Gid).To(Equal(uint32(0)))
+		})
 	})
 
 	Describe("MetricsCommand", func() {
@@ -208,6 +213,11 @@ var _ = Describe("PrivilegedCommandCreator", func() {
 				Expect(metricsCmd.Args[2]).To(Equal("bar"))
 				Expect(metricsCmd.Args[3]).To(Equal("stats"))
 			})
+		})
+
+		It("returns a command that runs as a privileged user", func() {
+			Expect(metricsCmd.SysProcAttr.Credential.Uid).To(Equal(uint32(0)))
+			Expect(metricsCmd.SysProcAttr.Credential.Gid).To(Equal(uint32(0)))
 		})
 	})
 })

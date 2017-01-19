@@ -6,17 +6,14 @@ import (
 	"strings"
 	"syscall"
 
-	specs "github.com/opencontainers/runtime-spec/specs-go"
-
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
 	"code.cloudfoundry.org/lager"
 )
 
 type PrivilegedCommandCreator struct {
-	BinPath    string
-	ExtraArgs  []string
-	IDMappings []specs.LinuxIDMapping
+	BinPath   string
+	ExtraArgs []string
 }
 
 func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd {
@@ -44,11 +41,27 @@ func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string
 }
 
 func (p *PrivilegedCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
-	return exec.Command(p.BinPath, append(p.ExtraArgs, "delete", handle)...)
+	cmd := exec.Command(p.BinPath, append(p.ExtraArgs, "delete", handle)...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: 0,
+			Gid: 0,
+		},
+	}
+
+	return cmd
 }
 
 func (p *PrivilegedCommandCreator) MetricsCommand(log lager.Logger, handle string) *exec.Cmd {
-	return exec.Command(p.BinPath, append(p.ExtraArgs, "stats", handle)...)
+	cmd := exec.Command(p.BinPath, append(p.ExtraArgs, "stats", handle)...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: 0,
+			Gid: 0,
+		},
+	}
+
+	return cmd
 }
 
 func (p *PrivilegedCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {

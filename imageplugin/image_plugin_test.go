@@ -24,7 +24,7 @@ import (
 var _ = Describe("ImagePlugin", func() {
 
 	var (
-		imagePlugin *imageplugin.ImagePlugin
+		imagePlugin imageplugin.ImagePlugin
 
 		fakeUnprivilegedCommandCreator *fakes.FakeCommandCreator
 		fakePrivilegedCommandCreator   *fakes.FakeCommandCreator
@@ -46,7 +46,12 @@ var _ = Describe("ImagePlugin", func() {
 	})
 
 	JustBeforeEach(func() {
-		imagePlugin = imageplugin.New(fakeUnprivilegedCommandCreator, fakePrivilegedCommandCreator, fakeCommandRunner, defaultRootfs)
+		imagePlugin = imageplugin.ImagePlugin{
+			UnprivilegedCommandCreator: fakeUnprivilegedCommandCreator,
+			PrivilegedCommandCreator:   fakePrivilegedCommandCreator,
+			CommandRunner:              fakeCommandRunner,
+			DefaultRootfs:              defaultRootfs,
+		}
 	})
 
 	Describe("Create", func() {
@@ -256,7 +261,7 @@ var _ = Describe("ImagePlugin", func() {
 			})
 		})
 
-		FContext("when no unpriviliged command creator is provided", func() {
+		Context("when no unpriviliged command creator is provided", func() {
 			BeforeEach(func() {
 				fakeUnprivilegedCommandCreator = nil
 			})
