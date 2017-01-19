@@ -83,7 +83,6 @@ var _ = Describe("ImagePlugin", func() {
 			createRootfs = ""
 			createEnvs = []string{}
 			createErr = nil
-
 		})
 
 		JustBeforeEach(func() {
@@ -254,6 +253,32 @@ var _ = Describe("ImagePlugin", func() {
 						glager.Data("type", "info"),
 					),
 				))
+			})
+		})
+
+		FContext("when no unpriviliged command creator is provided", func() {
+			BeforeEach(func() {
+				fakeUnprivilegedCommandCreator = nil
+			})
+
+			It("errors sensibly when trying to create an unprivileged container", func() {
+				Expect(createErr).To(MatchError("no image_plugin provided"))
+			})
+		})
+
+		Context("when no priviliged command creator is provided", func() {
+			BeforeEach(func() {
+				fakePrivilegedCommandCreator = nil
+			})
+
+			Context("and a privileged container is created", func() {
+				BeforeEach(func() {
+					namespaced = false
+				})
+
+				It("errors sensibly when trying to create an unprivileged container", func() {
+					Expect(createErr).To(MatchError("no image_plugin provided"))
+				})
 			})
 		})
 	})

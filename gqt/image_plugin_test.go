@@ -37,7 +37,7 @@ var _ = FDescribe("Image Plugin", func() {
 		Expect(client.Stop()).To(Succeed())
 	})
 
-	Context("when an unprivileged image plugin is provided", func() {
+	Context("when only an unprivileged image plugin is provided", func() {
 		var (
 			tmpDir string
 		)
@@ -61,7 +61,7 @@ var _ = FDescribe("Image Plugin", func() {
 			Expect(os.RemoveAll(tmpDir)).To(Succeed())
 		})
 
-		Context("and a container is created", func() {
+		Context("and an unprivileged container is successfully created", func() {
 			var (
 				containerSpec garden.ContainerSpec
 				container     garden.Container
@@ -71,7 +71,6 @@ var _ = FDescribe("Image Plugin", func() {
 			)
 
 			BeforeEach(func() {
-				containerSpec.Privileged = false
 				destroyContainer = true
 
 				args = append(args,
@@ -241,7 +240,7 @@ var _ = FDescribe("Image Plugin", func() {
 				})
 			})
 
-			Context("and metrics are collected on that containers", func() {
+			Context("and metrics are collected on that container", func() {
 				BeforeEach(func() {
 					args = append(args,
 						"--image-plugin-extra-arg", "\"--metrics-whoami-path\"",
@@ -341,6 +340,14 @@ var _ = FDescribe("Image Plugin", func() {
 				})
 			})
 		})
+
+		FContext("but we attempt to create a privileged container", func() {
+			It("returns an informative error", func() {
+				_, err := client.Create(garden.ContainerSpec{Privileged: true})
+				Expect(err).To(MatchError("no privileged_image_plugin is set"))
+			})
+		})
+
 	})
 
 	Context("when a privileged image plugin is provided", func() {
@@ -523,6 +530,54 @@ var _ = FDescribe("Image Plugin", func() {
 						Expect(err).ToNot(HaveOccurred())
 
 						Expect(string(pluginArgsBytes)).To(ContainSubstring("--exclude-image-from-quota"))
+					})
+				})
+			})
+
+			Context("and metrics are collected on that container", func() {
+				BeforeEach(func() {
+					args = append(args,
+						"--privileged-image-plugin-extra-arg", "\"--metrics-whoami-path\"",
+						"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-whoami"))
+				})
+
+				JustBeforeEach(func() {
+					_, err := container.Metrics()
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("executes the plugin, passing the correct args", func() {
+					pluginArgsBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "args"))
+					Expect(err).ToNot(HaveOccurred())
+
+					pluginArgs := strings.Split(string(pluginArgsBytes), " ")
+					Expect(pluginArgs).To(Equal([]string{
+						testImagePluginBin,
+						"--image-path", tmpDir,
+						"--args-path", filepath.Join(tmpDir, "args"),
+						"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
+						"--metrics-whoami-path", filepath.Join(tmpDir, "metrics-whoami"),
+						"stats",
+						handle,
+					}))
+				})
+
+				It("executes the plugin as the correct user", func() {
+					whoamiBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "metrics-whoami"))
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(string(whoamiBytes)).To(ContainSubstring("0 - 0"))
+				})
+
+				Context("when the plugin logs to stderr", func() {
+					BeforeEach(func() {
+						args = append(args,
+							"--privileged-image-plugin-extra-arg", "\"--metrics-log-content\"",
+							"--privileged-image-plugin-extra-arg", "METRICS-FAKE-LOG-LINE")
+					})
+
+					It("relogs the plugin's stderr to the garden logs", func() {
+						Eventually(client).Should(gbytes.Say("METRICS-FAKE-LOG-LINE"))
 					})
 				})
 			})

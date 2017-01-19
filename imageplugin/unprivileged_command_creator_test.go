@@ -222,7 +222,7 @@ var _ = Describe("UnprivilegedCommandCreator", func() {
 			Expect(metricsCmd.Path).To(Equal(binPath))
 		})
 
-		It("returns a command with the delete action", func() {
+		It("returns a command with the stats action", func() {
 			Expect(metricsCmd.Args[1]).To(Equal("stats"))
 		})
 
@@ -247,7 +247,6 @@ var _ = Describe("UnprivilegedCommandCreator", func() {
 			Expect(metricsCmd.SysProcAttr.Credential.Gid).To(Equal(idMappings[0].HostID))
 		})
 	})
-
 })
 
 // import (

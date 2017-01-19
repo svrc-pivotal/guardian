@@ -3,6 +3,7 @@ package imageplugin
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"os/exec"
@@ -62,6 +63,9 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 
 	var createCmd *exec.Cmd
 	if spec.Namespaced {
+		if p.unprivilegedCommandCreator == (CommandCreator)(nil) {
+			return "", nil, errors.New("no image_plugin provided")
+		}
 		createCmd = p.unprivilegedCommandCreator.CreateCommand(log, handle, spec)
 	} else {
 		createCmd = p.privilegedCommandCreator.CreateCommand(log, handle, spec)

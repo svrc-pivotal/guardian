@@ -465,15 +465,6 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 			cmd.Containers.DefaultRootFS,
 		)
 	}
-	// if cmd.Image.Plugin.Path() != "" || cmd.Image.PrivilegedPlugin.Path() != "" {
-	// 	defaultRootFS, err := url.Parse(cmd.Containers.DefaultRootFSDir.Path())
-	// 	if err != nil {
-	// 		logger.Fatal("failed-to-parse-default-rootfs", err)
-	// 	}
-	// 	return imageplugin.New(cmd.Image.Plugin.Path(), cmd.Image.PrivilegedPlugin.Path(), linux_command_runner.New(),
-	// 		defaultRootFS, idMappings, cmd.Image.PrivilegedPluginExtraArgs,
-	// 		cmd.Image.PluginExtraArgs)
-	// }
 
 	logger = logger.Session("volume-creator", lager.Data{"graphRoot": graphRoot})
 	runner := &logging.Runner{CommandRunner: linux_command_runner.New(), Logger: logger}
