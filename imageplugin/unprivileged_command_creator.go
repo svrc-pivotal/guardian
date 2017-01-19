@@ -20,10 +20,10 @@ type UnprivilegedCommandCreator struct {
 	IDMappings []specs.LinuxIDMapping
 }
 
-func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
-	args := append(p.ExtraArgs, "create")
+func (cc *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
+	args := append(cc.ExtraArgs, "create")
 
-	for _, mapping := range p.IDMappings {
+	for _, mapping := range cc.IDMappings {
 		args = append(args, "--uid-mapping", stringifyMapping(mapping))
 		args = append(args, "--gid-mapping", stringifyMapping(mapping))
 	}
@@ -39,42 +39,38 @@ func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle stri
 	rootfs := strings.Replace(spec.RootFS.String(), "#", ":", 1)
 
 	args = append(args, rootfs, handle)
-	cmd := exec.Command(p.BinPath, args...)
+	cmd := exec.Command(cc.BinPath, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
-			Uid: p.IDMappings[0].HostID,
-			Gid: p.IDMappings[0].HostID,
+			Uid: cc.IDMappings[0].HostID,
+			Gid: cc.IDMappings[0].HostID,
 		},
 	}
 
 	return cmd, nil
 }
 
-func (p *UnprivilegedCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
-	cmd := exec.Command(p.BinPath, append(p.ExtraArgs, "delete", handle)...)
+func (cc *UnprivilegedCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
+	cmd := exec.Command(cc.BinPath, append(cc.ExtraArgs, "delete", handle)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
-			Uid: p.IDMappings[0].HostID,
-			Gid: p.IDMappings[0].HostID,
+			Uid: cc.IDMappings[0].HostID,
+			Gid: cc.IDMappings[0].HostID,
 		},
 	}
 
 	return cmd
 }
 
-func (p *UnprivilegedCommandCreator) MetricsCommand(log lager.Logger, handle string) *exec.Cmd {
-	cmd := exec.Command(p.BinPath, append(p.ExtraArgs, "stats", handle)...)
+func (cc *UnprivilegedCommandCreator) MetricsCommand(log lager.Logger, handle string) *exec.Cmd {
+	cmd := exec.Command(cc.BinPath, append(cc.ExtraArgs, "stats", handle)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
-			Uid: p.IDMappings[0].HostID,
-			Gid: p.IDMappings[0].HostID,
+			Uid: cc.IDMappings[0].HostID,
+			Gid: cc.IDMappings[0].HostID,
 		},
 	}
 	return cmd
-}
-
-func (p *UnprivilegedCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {
-	return nil
 }
 
 func stringifyMapping(mapping specs.LinuxIDMapping) string {

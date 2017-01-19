@@ -39,10 +39,4 @@ var _ = Describe("NotImplementedCommandCreator", func() {
 			Expect(notImplementedCommandCreator.MetricsCommand(nil, "")).To(BeNil())
 		})
 	})
-
-	Describe("GCCommand", func() {
-		It("returns nil", func() {
-			Expect(notImplementedCommandCreator.GCCommand(nil)).To(BeNil())
-		})
-	})
 })

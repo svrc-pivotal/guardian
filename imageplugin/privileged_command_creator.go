@@ -16,8 +16,8 @@ type PrivilegedCommandCreator struct {
 	ExtraArgs []string
 }
 
-func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
-	args := append(p.ExtraArgs, "create")
+func (cc *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
+	args := append(cc.ExtraArgs, "create")
 	if spec.QuotaSize > 0 {
 		args = append(args, "--disk-limit-size-bytes", strconv.FormatInt(spec.QuotaSize, 10))
 
@@ -29,7 +29,7 @@ func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string
 	rootfs := strings.Replace(spec.RootFS.String(), "#", ":", 1)
 
 	args = append(args, rootfs, handle)
-	cmd := exec.Command(p.BinPath, args...)
+	cmd := exec.Command(cc.BinPath, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
 			Uid: 0,
@@ -40,8 +40,8 @@ func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string
 	return cmd, nil
 }
 
-func (p *PrivilegedCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
-	cmd := exec.Command(p.BinPath, append(p.ExtraArgs, "delete", handle)...)
+func (cc *PrivilegedCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
+	cmd := exec.Command(cc.BinPath, append(cc.ExtraArgs, "delete", handle)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
 			Uid: 0,
@@ -52,8 +52,8 @@ func (p *PrivilegedCommandCreator) DestroyCommand(log lager.Logger, handle strin
 	return cmd
 }
 
-func (p *PrivilegedCommandCreator) MetricsCommand(log lager.Logger, handle string) *exec.Cmd {
-	cmd := exec.Command(p.BinPath, append(p.ExtraArgs, "stats", handle)...)
+func (cc *PrivilegedCommandCreator) MetricsCommand(log lager.Logger, handle string) *exec.Cmd {
+	cmd := exec.Command(cc.BinPath, append(cc.ExtraArgs, "stats", handle)...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: &syscall.Credential{
 			Uid: 0,
@@ -62,8 +62,4 @@ func (p *PrivilegedCommandCreator) MetricsCommand(log lager.Logger, handle strin
 	}
 
 	return cmd
-}
-
-func (p *PrivilegedCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {
-	return nil
 }

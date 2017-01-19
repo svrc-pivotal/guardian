@@ -40,14 +40,6 @@ type FakeCommandCreator struct {
 	metricsCommandReturns struct {
 		result1 *exec.Cmd
 	}
-	GCCommandStub        func(log lager.Logger) *exec.Cmd
-	gCCommandMutex       sync.RWMutex
-	gCCommandArgsForCall []struct {
-		log lager.Logger
-	}
-	gCCommandReturns struct {
-		result1 *exec.Cmd
-	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -156,39 +148,6 @@ func (fake *FakeCommandCreator) MetricsCommandReturns(result1 *exec.Cmd) {
 	}{result1}
 }
 
-func (fake *FakeCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {
-	fake.gCCommandMutex.Lock()
-	fake.gCCommandArgsForCall = append(fake.gCCommandArgsForCall, struct {
-		log lager.Logger
-	}{log})
-	fake.recordInvocation("GCCommand", []interface{}{log})
-	fake.gCCommandMutex.Unlock()
-	if fake.GCCommandStub != nil {
-		return fake.GCCommandStub(log)
-	} else {
-		return fake.gCCommandReturns.result1
-	}
-}
-
-func (fake *FakeCommandCreator) GCCommandCallCount() int {
-	fake.gCCommandMutex.RLock()
-	defer fake.gCCommandMutex.RUnlock()
-	return len(fake.gCCommandArgsForCall)
-}
-
-func (fake *FakeCommandCreator) GCCommandArgsForCall(i int) lager.Logger {
-	fake.gCCommandMutex.RLock()
-	defer fake.gCCommandMutex.RUnlock()
-	return fake.gCCommandArgsForCall[i].log
-}
-
-func (fake *FakeCommandCreator) GCCommandReturns(result1 *exec.Cmd) {
-	fake.GCCommandStub = nil
-	fake.gCCommandReturns = struct {
-		result1 *exec.Cmd
-	}{result1}
-}
-
 func (fake *FakeCommandCreator) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -198,8 +157,6 @@ func (fake *FakeCommandCreator) Invocations() map[string][][]interface{} {
 	defer fake.destroyCommandMutex.RUnlock()
 	fake.metricsCommandMutex.RLock()
 	defer fake.metricsCommandMutex.RUnlock()
-	fake.gCCommandMutex.RLock()
-	defer fake.gCCommandMutex.RUnlock()
 	return fake.invocations
 }
 

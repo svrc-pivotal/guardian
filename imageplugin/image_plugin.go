@@ -22,7 +22,6 @@ type CommandCreator interface {
 	CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error)
 	DestroyCommand(log lager.Logger, handle string) *exec.Cmd
 	MetricsCommand(log lager.Logger, handle string) *exec.Cmd
-	GCCommand(log lager.Logger) *exec.Cmd
 }
 
 type ImagePlugin struct {
@@ -73,7 +72,7 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 	imagePath := strings.TrimSpace(stdoutBuffer.String())
 	rootfsPath := filepath.Join(imagePath, "rootfs")
 
-	envVars, err := p.readEnvVars(imagePath)
+	envVars, err := readEnvVars(imagePath)
 	if err != nil {
 		log.Error("read-image-json-failed", err)
 		return "", nil, errorwrapper.Wrap(err, "reading image.json")
@@ -145,7 +144,7 @@ func (p *ImagePlugin) GC(log lager.Logger) error {
 	return nil
 }
 
-func (p *ImagePlugin) readEnvVars(imagePath string) ([]string, error) {
+func readEnvVars(imagePath string) ([]string, error) {
 	imageConfigFile, err := os.Open(filepath.Join(imagePath, "image.json"))
 	if err != nil {
 		if os.IsNotExist(err) {
