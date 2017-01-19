@@ -58,7 +58,9 @@ var _ = Describe("UnprivilegedCommandCreator", func() {
 		})
 
 		JustBeforeEach(func() {
-			createCmd = commandCreator.CreateCommand(nil, "test-handle", spec)
+			var err error
+			createCmd, err = commandCreator.CreateCommand(nil, "test-handle", spec)
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("returns a command with the correct image plugin path", func() {
@@ -175,7 +177,6 @@ var _ = Describe("UnprivilegedCommandCreator", func() {
 
 		JustBeforeEach(func() {
 			destroyCmd = commandCreator.DestroyCommand(nil, "test-handle")
-			Expect(destroyCmd).NotTo(BeNil())
 		})
 
 		It("returns a command with the correct image plugin path", func() {
@@ -215,7 +216,6 @@ var _ = Describe("UnprivilegedCommandCreator", func() {
 
 		JustBeforeEach(func() {
 			metricsCmd = commandCreator.MetricsCommand(nil, "test-handle")
-			Expect(metricsCmd).NotTo(BeNil())
 		})
 
 		It("returns a command with the correct image plugin path", func() {

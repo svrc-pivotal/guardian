@@ -11,7 +11,7 @@ import (
 )
 
 type FakeCommandCreator struct {
-	CreateCommandStub        func(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd
+	CreateCommandStub        func(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error)
 	createCommandMutex       sync.RWMutex
 	createCommandArgsForCall []struct {
 		log    lager.Logger
@@ -20,6 +20,7 @@ type FakeCommandCreator struct {
 	}
 	createCommandReturns struct {
 		result1 *exec.Cmd
+		result2 error
 	}
 	DestroyCommandStub        func(log lager.Logger, handle string) *exec.Cmd
 	destroyCommandMutex       sync.RWMutex
@@ -51,7 +52,7 @@ type FakeCommandCreator struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd {
+func (fake *FakeCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
 	fake.createCommandMutex.Lock()
 	fake.createCommandArgsForCall = append(fake.createCommandArgsForCall, struct {
 		log    lager.Logger
@@ -63,7 +64,7 @@ func (fake *FakeCommandCreator) CreateCommand(log lager.Logger, handle string, s
 	if fake.CreateCommandStub != nil {
 		return fake.CreateCommandStub(log, handle, spec)
 	} else {
-		return fake.createCommandReturns.result1
+		return fake.createCommandReturns.result1, fake.createCommandReturns.result2
 	}
 }
 
@@ -79,11 +80,12 @@ func (fake *FakeCommandCreator) CreateCommandArgsForCall(i int) (lager.Logger, s
 	return fake.createCommandArgsForCall[i].log, fake.createCommandArgsForCall[i].handle, fake.createCommandArgsForCall[i].spec
 }
 
-func (fake *FakeCommandCreator) CreateCommandReturns(result1 *exec.Cmd) {
+func (fake *FakeCommandCreator) CreateCommandReturns(result1 *exec.Cmd, result2 error) {
 	fake.CreateCommandStub = nil
 	fake.createCommandReturns = struct {
 		result1 *exec.Cmd
-	}{result1}
+		result2 error
+	}{result1, result2}
 }
 
 func (fake *FakeCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {

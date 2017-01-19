@@ -20,7 +20,7 @@ import (
 
 //go:generate counterfeiter . CommandCreator
 type CommandCreator interface {
-	CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd
+	CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error)
 	DestroyCommand(log lager.Logger, handle string) *exec.Cmd
 	MetricsCommand(log lager.Logger, handle string) *exec.Cmd
 	GCCommand(log lager.Logger) *exec.Cmd
@@ -32,19 +32,6 @@ type ImagePlugin struct {
 	CommandRunner              command_runner.CommandRunner
 	DefaultRootfs              string
 }
-
-// func New(UnprivilegedCommandCreator CommandCreator,
-// 	PrivilegedCommandCreator CommandCreator,
-// 	CommandRunner command_runner.CommandRunner,
-// 	DefaultRootfs string) ImagePlugin {
-
-// 	return ImagePlugin{
-// 		UnprivilegedCommandCreator: UnprivilegedCommandCreator,
-// 		PrivilegedCommandCreator:   PrivilegedCommandCreator,
-// 		CommandRunner:              CommandRunner,
-// 		DefaultRootfs:              DefaultRootfs,
-// 	}
-// }
 
 func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provider.Spec) (string, []string, error) {
 	log = log.Session("image-plugin-create")
@@ -61,15 +48,22 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 		}
 	}
 
-	var createCmd *exec.Cmd
+	var (
+		createCmd *exec.Cmd
+		err       error
+	)
 	if spec.Namespaced {
-		if p.UnprivilegedCommandCreator == nil {
+		if p.UnprivilegedCommandCreator == (CommandCreator)(nil) {
 			return "", nil, errors.New("no image_plugin provided")
 		}
-		createCmd = p.UnprivilegedCommandCreator.CreateCommand(log, handle, spec)
+		createCmd, err = p.UnprivilegedCommandCreator.CreateCommand(log, handle, spec)
 	} else {
-		createCmd = p.PrivilegedCommandCreator.CreateCommand(log, handle, spec)
+		createCmd, err = p.PrivilegedCommandCreator.CreateCommand(log, handle, spec)
 	}
+	if err != nil {
+		return "", nil, errorwrapper.Wrap(err, "creating create command")
+	}
+
 	stdoutBuffer := bytes.NewBuffer([]byte{})
 	createCmd.Stdout = stdoutBuffer
 	createCmd.Stderr = lagregator.NewRelogger(log)

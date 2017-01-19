@@ -1,6 +1,7 @@
 package guardiancmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -450,19 +451,7 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 	}
 
 	if cmd.Image.Plugin.Path() != "" || cmd.Image.PrivilegedPlugin.Path() != "" {
-		return &imageplugin.ImagePlugin{
-			&imageplugin.UnprivilegedCommandCreator{
-				BinPath:    cmd.Image.Plugin.Path(),
-				ExtraArgs:  cmd.Image.PluginExtraArgs,
-				IDMappings: idMappings,
-			},
-			&imageplugin.PrivilegedCommandCreator{
-				BinPath:   cmd.Image.PrivilegedPlugin.Path(),
-				ExtraArgs: cmd.Image.PrivilegedPluginExtraArgs,
-			},
-			linux_command_runner.New(),
-			cmd.Containers.DefaultRootFS,
-		}
+		return cmd.wireImagePlugin()
 	}
 
 	logger = logger.Session("volume-creator", lager.Data{"graphRoot": graphRoot})
@@ -576,6 +565,38 @@ func (cmd *GuardianCommand) wireVolumeCreator(logger lager.Logger, graphRoot str
 		layerCreator,
 		rootfs_provider.NewMetricsAdapter(quotaManager.GetUsage, quotaedGraphDriver.GetMntPath),
 		ovenCleaner)
+}
+
+func (cmd *GuardianCommand) wireImagePlugin() gardener.VolumeCreator {
+	var unprivilegedCommandCreator imageplugin.CommandCreator = &imageplugin.NotImplementedCommandCreator{
+		Err: errors.New("no image_plugin provided"),
+	}
+
+	var privilegedCommandCreator imageplugin.CommandCreator = &imageplugin.NotImplementedCommandCreator{
+		Err: errors.New("no privileged_image_plugin provided"),
+	}
+
+	if cmd.Image.Plugin.Path() != "" {
+		unprivilegedCommandCreator = &imageplugin.UnprivilegedCommandCreator{
+			BinPath:    cmd.Image.Plugin.Path(),
+			ExtraArgs:  cmd.Image.PluginExtraArgs,
+			IDMappings: idMappings,
+		}
+	}
+
+	if cmd.Image.PrivilegedPlugin.Path() != "" {
+		privilegedCommandCreator = &imageplugin.PrivilegedCommandCreator{
+			BinPath:   cmd.Image.PrivilegedPlugin.Path(),
+			ExtraArgs: cmd.Image.PrivilegedPluginExtraArgs,
+		}
+	}
+
+	return &imageplugin.ImagePlugin{
+		UnprivilegedCommandCreator: unprivilegedCommandCreator,
+		PrivilegedCommandCreator:   privilegedCommandCreator,
+		CommandRunner:              linux_command_runner.New(),
+		DefaultRootfs:              cmd.Containers.DefaultRootFS,
+	}
 }
 
 func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadooPath, runcPath, nstarPath, tarPath, appArmorProfile string, properties gardener.PropertyManager) *rundmc.Containerizer {

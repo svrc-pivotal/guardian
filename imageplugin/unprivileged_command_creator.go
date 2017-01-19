@@ -20,7 +20,7 @@ type UnprivilegedCommandCreator struct {
 	IDMappings []specs.LinuxIDMapping
 }
 
-func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd {
+func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
 	args := append(p.ExtraArgs, "create")
 
 	for _, mapping := range p.IDMappings {
@@ -47,7 +47,7 @@ func (p *UnprivilegedCommandCreator) CreateCommand(log lager.Logger, handle stri
 		},
 	}
 
-	return cmd
+	return cmd, nil
 }
 
 func (p *UnprivilegedCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
@@ -74,22 +74,6 @@ func (p *UnprivilegedCommandCreator) MetricsCommand(log lager.Logger, handle str
 }
 
 func (p *UnprivilegedCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {
-	log = log.Session("image-plugin-gc")
-	log.Debug("start")
-	defer log.Debug("end")
-
-	// args := append(p.extraArgs, "clean")
-	// cmd := exec.Command(p.binPath, args...)
-	// cmd.Stderr = lagregator.NewRelogger(log)
-	// outBuffer := bytes.NewBuffer([]byte{})
-	// cmd.Stdout = outBuffer
-
-	// if err := p.commandRunner.Run(cmd); err != nil {
-	// 	logData := lager.Data{"action": "clean", "stdout": outBuffer.String()}
-	// 	log.Error("external-image-manager-result", err, logData)
-	// 	return fmt.Errorf("external image manager clean failed: %s (%s)", outBuffer.String(), err)
-	// }
-
 	return nil
 }
 

@@ -341,16 +341,15 @@ var _ = FDescribe("Image Plugin", func() {
 			})
 		})
 
-		FContext("but we attempt to create a privileged container", func() {
+		Context("but we attempt to create a privileged container", func() {
 			It("returns an informative error", func() {
 				_, err := client.Create(garden.ContainerSpec{Privileged: true})
-				Expect(err).To(MatchError("no privileged_image_plugin is set"))
+				Expect(err).To(MatchError(ContainSubstring("no privileged_image_plugin provided")))
 			})
 		})
-
 	})
 
-	Context("when a privileged image plugin is provided", func() {
+	Context("when only a privileged image plugin is provided", func() {
 		var (
 			tmpDir string
 		)
@@ -629,6 +628,13 @@ var _ = FDescribe("Image Plugin", func() {
 						Eventually(client).Should(gbytes.Say("DESTROY-FAKE-LOG-LINE"))
 					})
 				})
+			})
+		})
+
+		FContext("but we attempt to create an unprivileged container", func() {
+			It("returns an informative error", func() {
+				_, err := client.Create(garden.ContainerSpec{Privileged: false})
+				Expect(err).To(MatchError(ContainSubstring("no image_plugin provided")))
 			})
 		})
 	})

@@ -74,8 +74,8 @@ var _ = Describe("ImagePlugin", func() {
 
 		BeforeEach(func() {
 			cmd = exec.Command("unpriv-plugin", "create")
-			fakeUnprivilegedCommandCreator.CreateCommandReturns(cmd)
-			fakePrivilegedCommandCreator.CreateCommandReturns(cmd)
+			fakeUnprivilegedCommandCreator.CreateCommandReturns(cmd, nil)
+			fakePrivilegedCommandCreator.CreateCommandReturns(cmd, nil)
 
 			handle = "test-handle"
 			rootfs = "docker:///busybox"
@@ -118,7 +118,17 @@ var _ = Describe("ImagePlugin", func() {
 			Expect(specArg).To(Equal(rootfsProviderSpec))
 		})
 
-		Context("when destroying an unprivileged volume", func() {
+		Context("when the unprivileged command creator returns an error", func() {
+			BeforeEach(func() {
+				fakeUnprivilegedCommandCreator.CreateCommandReturns(nil, errors.New("explosion"))
+			})
+
+			It("returns that error", func() {
+				Expect(createErr).To(MatchError("creating create command: explosion"))
+			})
+		})
+
+		Context("when creating an unprivileged volume", func() {
 			BeforeEach(func() {
 				namespaced = false
 			})
@@ -131,6 +141,16 @@ var _ = Describe("ImagePlugin", func() {
 				_, handleArg, specArg := fakePrivilegedCommandCreator.CreateCommandArgsForCall(0)
 				Expect(handleArg).To(Equal(handle))
 				Expect(specArg).To(Equal(rootfsProviderSpec))
+			})
+
+			Context("when the privileged command creator returns an error", func() {
+				BeforeEach(func() {
+					fakePrivilegedCommandCreator.CreateCommandReturns(nil, errors.New("explosion"))
+				})
+
+				It("returns that error", func() {
+					Expect(createErr).To(MatchError("creating create command: explosion"))
+				})
 			})
 		})
 
@@ -258,32 +278,6 @@ var _ = Describe("ImagePlugin", func() {
 						glager.Data("type", "info"),
 					),
 				))
-			})
-		})
-
-		Context("when no unpriviliged command creator is provided", func() {
-			BeforeEach(func() {
-				fakeUnprivilegedCommandCreator = nil
-			})
-
-			It("errors sensibly when trying to create an unprivileged container", func() {
-				Expect(createErr).To(MatchError("no image_plugin provided"))
-			})
-		})
-
-		Context("when no priviliged command creator is provided", func() {
-			BeforeEach(func() {
-				fakePrivilegedCommandCreator = nil
-			})
-
-			Context("and a privileged container is created", func() {
-				BeforeEach(func() {
-					namespaced = false
-				})
-
-				It("errors sensibly when trying to create an unprivileged container", func() {
-					Expect(createErr).To(MatchError("no image_plugin provided"))
-				})
 			})
 		})
 	})

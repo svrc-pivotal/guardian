@@ -16,7 +16,7 @@ type PrivilegedCommandCreator struct {
 	ExtraArgs []string
 }
 
-func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) *exec.Cmd {
+func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string, spec rootfs_provider.Spec) (*exec.Cmd, error) {
 	args := append(p.ExtraArgs, "create")
 	if spec.QuotaSize > 0 {
 		args = append(args, "--disk-limit-size-bytes", strconv.FormatInt(spec.QuotaSize, 10))
@@ -37,7 +37,7 @@ func (p *PrivilegedCommandCreator) CreateCommand(log lager.Logger, handle string
 		},
 	}
 
-	return cmd
+	return cmd, nil
 }
 
 func (p *PrivilegedCommandCreator) DestroyCommand(log lager.Logger, handle string) *exec.Cmd {
@@ -65,21 +65,5 @@ func (p *PrivilegedCommandCreator) MetricsCommand(log lager.Logger, handle strin
 }
 
 func (p *PrivilegedCommandCreator) GCCommand(log lager.Logger) *exec.Cmd {
-	log = log.Session("image-plugin-gc")
-	log.Debug("start")
-	defer log.Debug("end")
-
-	// args := append(p.extraArgs, "clean")
-	// cmd := exec.Command(p.binPath, args...)
-	// cmd.Stderr = lagregator.NewRelogger(log)
-	// outBuffer := bytes.NewBuffer([]byte{})
-	// cmd.Stdout = outBuffer
-
-	// if err := p.commandRunner.Run(cmd); err != nil {
-	// 	logData := lager.Data{"action": "clean", "stdout": outBuffer.String()}
-	// 	log.Error("external-image-manager-result", err, logData)
-	// 	return fmt.Errorf("external image manager clean failed: %s (%s)", outBuffer.String(), err)
-	// }
-
 	return nil
 }
