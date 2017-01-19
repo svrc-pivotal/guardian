@@ -290,6 +290,19 @@ var _ = FDescribe("Image Plugin", func() {
 				})
 			})
 
+			Context("but the plugin fails when collecting metrics", func() {
+				BeforeEach(func() {
+					args = append(args,
+						"--image-plugin-extra-arg", "\"--fail-on\"",
+						"--image-plugin-extra-arg", "metrics")
+				})
+
+				It("returns the plugin's stdout in a useful error", func() {
+					_, err := container.Metrics()
+					Expect(err).To(MatchError(ContainSubstring("running image plugin metrics: metrics failed")))
+				})
+			})
+
 			Context("and that container is destroyed", func() {
 				BeforeEach(func() {
 					destroyContainer = false
@@ -338,6 +351,33 @@ var _ = FDescribe("Image Plugin", func() {
 						Eventually(client).Should(gbytes.Say("DESTROY-FAKE-LOG-LINE"))
 					})
 				})
+			})
+
+			Context("but the plugin fails on destruction", func() {
+				BeforeEach(func() {
+					destroyContainer = false
+					args = append(args,
+						"--image-plugin-extra-arg", "\"--fail-on\"",
+						"--image-plugin-extra-arg", "destroy")
+				})
+
+				It("returns the plugin's stdout in a useful error", func() {
+					err := client.Destroy(container.Handle())
+					Expect(err).To(MatchError(ContainSubstring("running image plugin destroy: destroy failed")))
+				})
+			})
+		})
+
+		Context("but the plugin fails on creation", func() {
+			BeforeEach(func() {
+				args = append(args,
+					"--image-plugin-extra-arg", "\"--fail-on\"",
+					"--image-plugin-extra-arg", "create")
+			})
+
+			It("returns the plugin's stdout in a useful error", func() {
+				_, err := client.Create(garden.ContainerSpec{})
+				Expect(err).To(MatchError(ContainSubstring("running image plugin create: create failed")))
 			})
 		})
 
@@ -581,6 +621,19 @@ var _ = FDescribe("Image Plugin", func() {
 				})
 			})
 
+			Context("but the plugin fails when collecting metrics", func() {
+				BeforeEach(func() {
+					args = append(args,
+						"--privileged-image-plugin-extra-arg", "\"--fail-on\"",
+						"--privileged-image-plugin-extra-arg", "metrics")
+				})
+
+				It("returns the plugin's stdout in a useful error", func() {
+					_, err := container.Metrics()
+					Expect(err).To(MatchError(ContainSubstring("running image plugin metrics: metrics failed")))
+				})
+			})
+
 			Context("and that container is destroyed", func() {
 				BeforeEach(func() {
 					destroyContainer = false
@@ -629,9 +682,36 @@ var _ = FDescribe("Image Plugin", func() {
 					})
 				})
 			})
+
+			Context("but the plugin fails on destruction", func() {
+				BeforeEach(func() {
+					destroyContainer = false
+					args = append(args,
+						"--privileged-image-plugin-extra-arg", "\"--fail-on\"",
+						"--privileged-image-plugin-extra-arg", "destroy")
+				})
+
+				It("returns the plugin's stdout in a useful error", func() {
+					err := client.Destroy(container.Handle())
+					Expect(err).To(MatchError(ContainSubstring("running image plugin destroy: destroy failed")))
+				})
+			})
 		})
 
-		FContext("but we attempt to create an unprivileged container", func() {
+		Context("but the plugin fails on creation", func() {
+			BeforeEach(func() {
+				args = append(args,
+					"--privileged-image-plugin-extra-arg", "\"--fail-on\"",
+					"--privileged-image-plugin-extra-arg", "create")
+			})
+
+			It("returns the plugin's stdout in a useful error", func() {
+				_, err := client.Create(garden.ContainerSpec{Privileged: true})
+				Expect(err).To(MatchError(ContainSubstring("running image plugin create: create failed")))
+			})
+		})
+
+		Context("but we attempt to create an unprivileged container", func() {
 			It("returns an informative error", func() {
 				_, err := client.Create(garden.ContainerSpec{Privileged: false})
 				Expect(err).To(MatchError(ContainSubstring("no image_plugin provided")))

@@ -55,6 +55,10 @@ func main() {
 			Name:  "metrics-log-content",
 			Usage: "Fake log content to write to stderr on metrics",
 		},
+		cli.StringFlag{
+			Name:  "fail-on",
+			Usage: "action to fail on",
+		},
 	}
 
 	fakeImagePlugin.Commands = []cli.Command{
@@ -88,6 +92,12 @@ var CreateCommand = cli.Command{
 	},
 
 	Action: func(ctx *cli.Context) error {
+		failOn := ctx.GlobalString("fail-on")
+		if failOn == "create" {
+			fmt.Println("create failed")
+			os.Exit(10)
+		}
+
 		argsFile := ctx.GlobalString("args-path")
 		if argsFile != "" {
 			err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
@@ -136,6 +146,12 @@ var DeleteCommand = cli.Command{
 	Name: "delete",
 
 	Action: func(ctx *cli.Context) error {
+		failOn := ctx.GlobalString("fail-on")
+		if failOn == "destroy" {
+			fmt.Println("destroy failed")
+			os.Exit(10)
+		}
+
 		argsFile := ctx.GlobalString("args-path")
 		if argsFile != "" {
 			err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
@@ -167,6 +183,11 @@ var StatsCommand = cli.Command{
 	Name: "stats",
 
 	Action: func(ctx *cli.Context) error {
+		failOn := ctx.GlobalString("fail-on")
+		if failOn == "metrics" {
+			fmt.Println("metrics failed")
+			os.Exit(10)
+		}
 		argsFile := ctx.GlobalString("args-path")
 		if argsFile != "" {
 			err := ioutil.WriteFile(argsFile, []byte(strings.Join(os.Args, " ")), 0777)
