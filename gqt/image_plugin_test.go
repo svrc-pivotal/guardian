@@ -241,14 +241,18 @@ var _ = FDescribe("Image Plugin", func() {
 			})
 
 			Context("and metrics are collected on that container", func() {
+				var metrics garden.Metrics
 				BeforeEach(func() {
 					args = append(args,
 						"--image-plugin-extra-arg", "\"--metrics-whoami-path\"",
-						"--image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-whoami"))
+						"--image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-whoami"),
+						"--image-plugin-extra-arg", "\"--metrics-output\"",
+						"--image-plugin-extra-arg", `{"disk_usage": {"total_bytes_used": 1000, "exclusive_bytes_used": 2000}}`)
 				})
 
 				JustBeforeEach(func() {
-					_, err := container.Metrics()
+					var err error
+					metrics, err = container.Metrics()
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -263,6 +267,12 @@ var _ = FDescribe("Image Plugin", func() {
 						"--args-path", filepath.Join(tmpDir, "args"),
 						"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
 						"--metrics-whoami-path", filepath.Join(tmpDir, "metrics-whoami"),
+						"--metrics-output",
+						"{\"disk_usage\":",
+						"{\"total_bytes_used\":",
+						"1000,",
+						"\"exclusive_bytes_used\":",
+						"2000}}",
 						"stats",
 						handle,
 					}))
@@ -277,6 +287,11 @@ var _ = FDescribe("Image Plugin", func() {
 					Expect(string(whoamiBytes)).To(ContainSubstring(fmt.Sprintf("%d - %d", maxId, maxId)))
 				})
 
+				It("returns the plugin stdout as disk stats", func() {
+					Expect(metrics.DiskStat.TotalBytesUsed).To(BeEquivalentTo(1000))
+					Expect(metrics.DiskStat.ExclusiveBytesUsed).To(BeEquivalentTo(2000))
+				})
+
 				Context("when the plugin logs to stderr", func() {
 					BeforeEach(func() {
 						args = append(args,
@@ -287,6 +302,19 @@ var _ = FDescribe("Image Plugin", func() {
 					It("relogs the plugin's stderr to the garden logs", func() {
 						Eventually(client).Should(gbytes.Say("METRICS-FAKE-LOG-LINE"))
 					})
+				})
+			})
+
+			Context("but the plugin returns nonsense stats", func() {
+				BeforeEach(func() {
+					args = append(args,
+						"--image-plugin-extra-arg", "\"--metrics-output\"",
+						"--image-plugin-extra-arg", "NONSENSE_JSON")
+				})
+
+				It("returns a sensible error containing the json", func() {
+					_, err := container.Metrics()
+					Expect(err).To(MatchError(ContainSubstring("parsing stats: NONSENSE_JSON")))
 				})
 			})
 
@@ -577,7 +605,9 @@ var _ = FDescribe("Image Plugin", func() {
 				BeforeEach(func() {
 					args = append(args,
 						"--privileged-image-plugin-extra-arg", "\"--metrics-whoami-path\"",
-						"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-whoami"))
+						"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-whoami"),
+						"--privileged-image-plugin-extra-arg", "\"--metrics-output\"",
+						"--privileged-image-plugin-extra-arg", `{"disk_usage": {"total_bytes_used": 1000, "exclusive_bytes_used": 2000}}`)
 				})
 
 				JustBeforeEach(func() {
@@ -596,6 +626,12 @@ var _ = FDescribe("Image Plugin", func() {
 						"--args-path", filepath.Join(tmpDir, "args"),
 						"--create-whoami-path", filepath.Join(tmpDir, "create-whoami"),
 						"--metrics-whoami-path", filepath.Join(tmpDir, "metrics-whoami"),
+						"--metrics-output",
+						"{\"disk_usage\":",
+						"{\"total_bytes_used\":",
+						"1000,",
+						"\"exclusive_bytes_used\":",
+						"2000}}",
 						"stats",
 						handle,
 					}))
@@ -715,6 +751,135 @@ var _ = FDescribe("Image Plugin", func() {
 			It("returns an informative error", func() {
 				_, err := client.Create(garden.ContainerSpec{Privileged: false})
 				Expect(err).To(MatchError(ContainSubstring("no image_plugin provided")))
+			})
+		})
+	})
+
+	Context("when both image_plugin and privileged_image_plugin are provided", func() {
+		var (
+			tmpDir string
+		)
+
+		BeforeEach(func() {
+			// make a a copy of the fake image plugin so we can check location of file called
+			Expect(copyFile(testImagePluginBin, fmt.Sprintf("%s-priv", testImagePluginBin))).To(Succeed())
+
+			var err error
+			tmpDir, err = ioutil.TempDir("", "")
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(os.Chmod(tmpDir, 0777)).To(Succeed())
+
+			args = append(args,
+				"--image-plugin", testImagePluginBin,
+				"--image-plugin-extra-arg", "\"--image-path\"",
+				"--image-plugin-extra-arg", tmpDir,
+				"--image-plugin-extra-arg", "\"--create-bin-location-path\"",
+				"--image-plugin-extra-arg", filepath.Join(tmpDir, "create-bin-location"),
+				"--image-plugin-extra-arg", "\"--destroy-bin-location-path\"",
+				"--image-plugin-extra-arg", filepath.Join(tmpDir, "destroy-bin-location"),
+				"--image-plugin-extra-arg", "\"--metrics-bin-location-path\"",
+				"--image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-bin-location"),
+				"--privileged-image-plugin", fmt.Sprintf("%s-priv", testImagePluginBin),
+				"--privileged-image-plugin-extra-arg", "\"--image-path\"",
+				"--privileged-image-plugin-extra-arg", tmpDir,
+				"--privileged-image-plugin-extra-arg", "\"--create-bin-location-path\"",
+				"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "create-bin-location"),
+				"--privileged-image-plugin-extra-arg", "\"--destroy-bin-location-path\"",
+				"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "destroy-bin-location"),
+				"--privileged-image-plugin-extra-arg", "\"--metrics-bin-location-path\"",
+				"--privileged-image-plugin-extra-arg", filepath.Join(tmpDir, "metrics-bin-location"))
+		})
+
+		AfterEach(func() {
+			Expect(os.RemoveAll(tmpDir)).To(Succeed())
+		})
+
+		Context("when an unprivileged container is created", func() {
+			var container garden.Container
+
+			JustBeforeEach(func() {
+				var err error
+				container, err = client.Create(garden.ContainerSpec{})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("calls the unprivileged plugin", func() {
+				pluginLocationBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "create-bin-location"))
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(string(pluginLocationBytes)).To(Equal(testImagePluginBin))
+			})
+
+			Context("and metrics are collected on that container", func() {
+				JustBeforeEach(func() {
+					_, err := container.Metrics()
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("calls the unprivileged plugin", func() {
+					pluginLocationBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "metrics-bin-location"))
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(string(pluginLocationBytes)).To(Equal(testImagePluginBin))
+				})
+			})
+
+			Context("and that container is destroyed", func() {
+				JustBeforeEach(func() {
+					Expect(client.Destroy(container.Handle())).To(Succeed())
+				})
+
+				It("calls the unprivileged plugin", func() {
+					pluginLocationBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "destroy-bin-location"))
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(string(pluginLocationBytes)).To(Equal(testImagePluginBin))
+				})
+			})
+		})
+
+		Context("when a privileged container is created", func() {
+			var container garden.Container
+
+			JustBeforeEach(func() {
+				var err error
+				container, err = client.Create(garden.ContainerSpec{Privileged: true})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("calls the privileged plugin", func() {
+				pluginLocationBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "create-bin-location"))
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(string(pluginLocationBytes)).To(Equal(fmt.Sprintf("%s-priv", testImagePluginBin)))
+			})
+
+			Context("and metrics are collected on that container", func() {
+				JustBeforeEach(func() {
+					_, err := container.Metrics()
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("calls the privileged plugin", func() {
+					pluginLocationBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "metrics-bin-location"))
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(string(pluginLocationBytes)).To(Equal(fmt.Sprintf("%s-priv", testImagePluginBin)))
+				})
+			})
+
+			Context("and that container is destroyed", func() {
+				JustBeforeEach(func() {
+					Expect(client.Destroy(container.Handle())).To(Succeed())
+				})
+
+				It("calls the privileged plugin", func() {
+					pluginLocationBytes, err := ioutil.ReadFile(filepath.Join(tmpDir, "destroy-bin-location"))
+					Expect(err).ToNot(HaveOccurred())
+
+					Expect(string(pluginLocationBytes)).To(Equal(fmt.Sprintf("%s-priv", testImagePluginBin)))
+				})
 			})
 		})
 	})

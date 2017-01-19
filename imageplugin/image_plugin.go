@@ -3,7 +3,6 @@ package imageplugin
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/url"
 	"os"
 	"os/exec"
@@ -53,9 +52,6 @@ func (p *ImagePlugin) Create(log lager.Logger, handle string, spec rootfs_provid
 		err       error
 	)
 	if spec.Namespaced {
-		if p.UnprivilegedCommandCreator == (CommandCreator)(nil) {
-			return "", nil, errors.New("no image_plugin provided")
-		}
 		createCmd, err = p.UnprivilegedCommandCreator.CreateCommand(log, handle, spec)
 	} else {
 		createCmd, err = p.PrivilegedCommandCreator.CreateCommand(log, handle, spec)
@@ -133,8 +129,16 @@ func (p *ImagePlugin) Metrics(log lager.Logger, handle string, namespaced bool) 
 		return garden.ContainerDiskStat{}, errorwrapper.Wrapf(err, "running image plugin metrics: %s", stdoutBuffer.String())
 	}
 
-	// Test that metrics are actually consumed
-	return garden.ContainerDiskStat{}, nil
+	var diskStat map[string]map[string]uint64
+	var consumableBuffer = bytes.NewBuffer(stdoutBuffer.Bytes())
+	if err := json.NewDecoder(consumableBuffer).Decode(&diskStat); err != nil {
+		return garden.ContainerDiskStat{}, errorwrapper.Wrapf(err, "parsing stats: %s", stdoutBuffer.String())
+	}
+
+	return garden.ContainerDiskStat{
+		TotalBytesUsed:     diskStat["disk_usage"]["total_bytes_used"],
+		ExclusiveBytesUsed: diskStat["disk_usage"]["exclusive_bytes_used"],
+	}, nil
 }
 
 func (p *ImagePlugin) GC(log lager.Logger) error {

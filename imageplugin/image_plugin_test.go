@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
 	"code.cloudfoundry.org/guardian/imageplugin"
 	fakes "code.cloudfoundry.org/guardian/imageplugin/imagepluginfakes"
@@ -405,6 +406,7 @@ var _ = Describe("ImagePlugin", func() {
 			fakeImagePluginStderr string
 			fakeImagePluginError  error
 
+			diskStats  garden.ContainerDiskStat
 			metricsErr error
 
 			namespaced bool
@@ -417,7 +419,7 @@ var _ = Describe("ImagePlugin", func() {
 
 			handle = "test-handle"
 
-			fakeImagePluginStdout = ""
+			fakeImagePluginStdout = `{"disk_usage": {"total_bytes_used": 100, "exclusive_bytes_used": 200}}`
 			fakeImagePluginStderr = ""
 			fakeImagePluginError = nil
 
@@ -438,10 +440,10 @@ var _ = Describe("ImagePlugin", func() {
 				},
 			)
 
-			_, metricsErr = imagePlugin.Metrics(fakeLogger, handle, namespaced)
+			diskStats, metricsErr = imagePlugin.Metrics(fakeLogger, handle, namespaced)
 		})
 
-		It("calls the unprivileged command creator to generate a destroy command", func() {
+		It("calls the unprivileged command creator to generate a metrics command", func() {
 			Expect(metricsErr).NotTo(HaveOccurred())
 			Expect(fakePrivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(0))
 			Expect(fakeUnprivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(1))
@@ -455,7 +457,7 @@ var _ = Describe("ImagePlugin", func() {
 				namespaced = false
 			})
 
-			It("calls the privileged command creator to generate a destroy command", func() {
+			It("calls the privileged command creator to generate a metrics command", func() {
 				Expect(metricsErr).NotTo(HaveOccurred())
 				Expect(fakePrivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(1))
 				Expect(fakeUnprivilegedCommandCreator.MetricsCommandCallCount()).To(Equal(0))
@@ -473,7 +475,7 @@ var _ = Describe("ImagePlugin", func() {
 			Expect(executedCmd).To(Equal(cmd))
 		})
 
-		Context("when running the image plugin destroy fails", func() {
+		Context("when running the image plugin metrics fails", func() {
 			BeforeEach(func() {
 				fakeImagePluginStdout = "image-plugin-exploded-due-to-oom"
 				fakeImagePluginError = errors.New("image-plugin-stats-failed")
@@ -483,6 +485,21 @@ var _ = Describe("ImagePlugin", func() {
 				str := fmt.Sprintf("running image plugin metrics: %s: %s",
 					fakeImagePluginStdout, fakeImagePluginError)
 				Expect(metricsErr).To(MatchError(str))
+			})
+		})
+
+		It("parses the plugin stdout as disk stats", func() {
+			Expect(diskStats.TotalBytesUsed).To(BeEquivalentTo(100))
+			Expect(diskStats.ExclusiveBytesUsed).To(BeEquivalentTo(200))
+		})
+
+		Context("when the plugin returns nonsense stats", func() {
+			BeforeEach(func() {
+				fakeImagePluginStdout = "NONSENSE_JSON"
+			})
+
+			It("returns a sensible error containing the json", func() {
+				Expect(metricsErr).To(MatchError(ContainSubstring("parsing stats: NONSENSE_JSON")))
 			})
 		})
 

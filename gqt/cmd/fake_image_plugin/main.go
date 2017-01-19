@@ -11,6 +11,8 @@ import (
 	"code.cloudfoundry.org/lager"
 
 	"github.com/urfave/cli"
+
+	"github.com/kardianos/osext"
 )
 
 func main() {
@@ -58,6 +60,22 @@ func main() {
 		cli.StringFlag{
 			Name:  "fail-on",
 			Usage: "action to fail on",
+		},
+		cli.StringFlag{
+			Name:  "metrics-output",
+			Usage: "metrics json to print on stdout on metrics",
+		},
+		cli.StringFlag{
+			Name:  "create-bin-location-path",
+			Usage: "Path to write this binary's location to on create",
+		},
+		cli.StringFlag{
+			Name:  "destroy-bin-location-path",
+			Usage: "Path to write this binary's location to on destroy",
+		},
+		cli.StringFlag{
+			Name:  "metrics-bin-location-path",
+			Usage: "Path to write this binary's location to on metrics",
 		},
 	}
 
@@ -109,6 +127,19 @@ var CreateCommand = cli.Command{
 		whoamiFile := ctx.GlobalString("create-whoami-path")
 		if whoamiFile != "" {
 			err := ioutil.WriteFile(whoamiFile, []byte(fmt.Sprintf("%d - %d", os.Getuid(), os.Getgid())), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		binLocationFile := ctx.GlobalString("create-bin-location-path")
+		if binLocationFile != "" {
+			executable, err := osext.Executable()
+			if err != nil {
+				panic(err)
+			}
+
+			err = ioutil.WriteFile(binLocationFile, []byte(executable), 0777)
 			if err != nil {
 				panic(err)
 			}
@@ -168,6 +199,19 @@ var DeleteCommand = cli.Command{
 			}
 		}
 
+		binLocationFile := ctx.GlobalString("destroy-bin-location-path")
+		if binLocationFile != "" {
+			executable, err := osext.Executable()
+			if err != nil {
+				panic(err)
+			}
+
+			err = ioutil.WriteFile(binLocationFile, []byte(executable), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
 		logContent := ctx.GlobalString("destroy-log-content")
 		if logContent != "" {
 			log := lager.NewLogger("fake-image-plugin")
@@ -204,11 +248,31 @@ var StatsCommand = cli.Command{
 			}
 		}
 
+		binLocationFile := ctx.GlobalString("metrics-bin-location-path")
+		if binLocationFile != "" {
+			executable, err := osext.Executable()
+			if err != nil {
+				panic(err)
+			}
+
+			err = ioutil.WriteFile(binLocationFile, []byte(executable), 0777)
+			if err != nil {
+				panic(err)
+			}
+		}
+
 		logContent := ctx.GlobalString("metrics-log-content")
 		if logContent != "" {
 			log := lager.NewLogger("fake-image-plugin")
 			log.RegisterSink(lager.NewWriterSink(os.Stderr, lager.INFO))
 			log.Info(logContent)
+		}
+
+		metricsOutput := ctx.GlobalString("metrics-output")
+		if metricsOutput != "" {
+			fmt.Println(metricsOutput)
+		} else {
+			fmt.Println("{}")
 		}
 
 		return nil
