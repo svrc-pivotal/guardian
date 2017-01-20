@@ -498,6 +498,7 @@ var _ = Describe("Attach", func() {
 		process, err := container.Run(garden.ProcessSpec{
 			Path: "sh",
 			Args: []string{"-c", "exit 13"},
+			Env:  []string{"CONTAINERD-SHIM=true"},
 		}, garden.ProcessIO{})
 		Expect(err).NotTo(HaveOccurred())
 

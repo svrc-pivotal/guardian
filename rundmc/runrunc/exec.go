@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/garden-shed/rootfs_provider"
@@ -81,6 +82,17 @@ func (e *Execer) Exec(log lager.Logger, bundlePath, id string, spec garden.Proce
 	}
 
 	processesPath := path.Join(bundlePath, "processes")
+	useContainerd := false
+	for _, env := range spec.Env {
+		split := strings.Split(env, "=")
+		if len(split) == 2 && split[0] == "CONTAINERD-SHIM" && split[1] == "true" {
+			useContainerd = true
+			break
+		}
+	}
+	if useContainerd {
+		return e.containerdRunner.Run(log, preparedSpec, processesPath, id, spec.TTY, io)
+	}
 	return e.runner.Run(log, preparedSpec, processesPath, id, spec.TTY, io)
 }
 
