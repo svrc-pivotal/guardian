@@ -11,7 +11,9 @@ import (
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gqt/runner"
+	"code.cloudfoundry.org/guardian/guardiancmd"
 	"code.cloudfoundry.org/guardian/sysinfo"
+	flags "github.com/jessevdk/go-flags"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -113,13 +115,57 @@ func TestGqt(t *testing.T) {
 	RunSpecs(t, "GQT Suite")
 }
 
-func runGardenSetup() {
-	Expect(exec.Command(gardenSetupBin, "--tag", fmt.Sprintf("%d", GinkgoParallelNode())).Run()).To(Succeed())
+// type GuardianSetupArgs struct {
+// 	Logger                     guardiancmd.LagerFlag
+// 	ServerTag                  string                 `long:"tag" description:"Optional 2-character identifier used for namespacing global configuration."`
+// 	IPTableBinPath             string                 `long:"iptables-bin"  default:"/sbin/iptables" description:"path to the iptables binary"`
+// 	DestroyContainersOnStartup bool                   `long:"destroy-containers-on-startup" description:"Clean up all the existing containers on startup."`
+// 	AllowHostAccess            bool                   `long:"allow-host-access" description:"Allow network access to the host machine."`
+// 	DenyNetworks               []guardiancmd.CIDRFlag `long:"deny-network"      description:"Network ranges to which traffic from containers will be denied. Can be specified multiple times."`
+// }
+
+func stringArgs(parsedArgs *guardiancmd.GuardianCommand) []string {
+	args := []string{}
+	args = append(args, "--log-level", parsedArgs.Logger.LogLevel)
+	args = append(args, "--tag", parsedArgs.Server.Tag)
+	args = append(args, "--iptables-bin", parsedArgs.Bin.IPTables.Path())
+
+	if parsedArgs.Containers.DestroyContainersOnStartup {
+		args = append(args, "--destroy-containers-on-startup")
+	}
+
+	if parsedArgs.Network.AllowHostAccess {
+		args = append(args, "--allow-host-access")
+	}
+
+	for _, cidr := range parsedArgs.Network.DenyNetworks {
+		args = append(args, "--deny-network", cidr.String())
+	}
+
+	return args
+}
+
+func runGardenSetup(args ...string) {
+	parsedArgs := &guardiancmd.GuardianCommand{}
+	parser := flags.NewParser(parsedArgs, flags.Default)
+	parser.NamespaceDelimiter = "-"
+
+	// parse args
+	args, err := parser.ParseArgs(args)
+	Expect(err).NotTo(HaveOccurred())
+
+	cmd := exec.Command(gardenSetupBin, stringArgs(parsedArgs)...)
+	cmd.Stdout = GinkgoWriter
+	cmd.Stderr = GinkgoWriter
+	Expect(cmd.Run()).To(Succeed())
 }
 
 func startGarden(argv ...string) *runner.RunningGarden {
-	runGardenSetup()
 	rootfs := os.Getenv("GARDEN_TEST_ROOTFS")
+
+	// depotDir := filepath.Join(os.TempDir(), fmt.Sprintf("test-garden-%d", GinkgoParallelNode()), "containers")
+	// Expect(os.MkdirAll(depotDir, 0755)).To(Succeed())
+	runGardenSetup(append(argv, []string{"--tag", fmt.Sprintf("%d", GinkgoParallelNode()), "--depot", "/tmp", "--init-bin", initBin, "--nstar-bin", nstarBin, "--dadoo-bin", dadooBin, "--tar-bin", tarBin}...)...)
 	return runner.Start(gardenBin, initBin, nstarBin, dadooBin, testImagePluginBin, rootfs, tarBin, nil, argv...)
 }
 

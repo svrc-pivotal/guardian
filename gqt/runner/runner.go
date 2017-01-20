@@ -117,7 +117,6 @@ func NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBi
 
 func Start(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin string, user *syscall.Credential, argv ...string) *RunningGarden {
 	runner := NewGardenRunner(bin, initBin, nstarBin, dadooBin, grootfsBin, rootfs, tarBin, "unix", fmt.Sprintf("/tmp/garden_%d.sock", GinkgoParallelNode()), user, argv...)
-
 	r := &RunningGarden{
 		runner:   runner,
 		DepotDir: runner.DepotDir,
