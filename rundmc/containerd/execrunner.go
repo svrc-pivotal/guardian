@@ -74,6 +74,18 @@ func (c *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 		}
 	}()
 
+	stdin, stdout, stderr, err := getIOPipes(processPath)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			stdin.Close()
+			stdout.Close()
+			stderr.Close()
+		}
+	}()
+
 	process := newProcess(processID, processPath, filepath.Join(processPath, "pidfile"), exitPipe, controlPipe)
 	log.Info(fmt.Sprintf("ExecRunner: %#v", c))
 
@@ -92,6 +104,9 @@ func (c *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 		CheckpointPath: "",
 		RootUID:        spec.HostUID,
 		RootGID:        spec.HostGID,
+		Stdin:          filepath.Join(processPath, "stdin"),
+		Stdout:         filepath.Join(processPath, "stdout"),
+		Stderr:         filepath.Join(processPath, "stderr"),
 	}
 
 	f, err := os.Create(filepath.Join(processPath, "process.json"))
@@ -114,6 +129,34 @@ func (c *ExecRunner) Run(log lager.Logger, spec *runrunc.PreparedSpec, processes
 
 func (c *ExecRunner) Attach(log lager.Logger, processID string, io garden.ProcessIO, processesPath string) (garden.Process, error) {
 	return nil, errors.New("Not implemented")
+}
+
+func getIOPipes(root string) (stdin, stdout, stderr *os.File, err error) {
+	path := filepath.Join(root, "stdin")
+	if err = syscall.Mkfifo(path, 0700); err != nil {
+		return stdin, stdout, stderr, fmt.Errorf("failed to create shim exit fifo: %s", err.Error())
+	}
+	if stdin, err = os.OpenFile(path, syscall.O_RDWR|syscall.O_NONBLOCK, 0); err != nil {
+		return stdin, stdout, stderr, fmt.Errorf("failed to create shim exit fifo: %s", err.Error())
+	}
+
+	path = filepath.Join(root, "stdout")
+	if err = syscall.Mkfifo(path, 0700); err != nil {
+		return stdin, stdout, stderr, fmt.Errorf("failed to create shim exit fifo: %s", err.Error())
+	}
+	if stdout, err = os.OpenFile(path, syscall.O_RDONLY|syscall.O_NONBLOCK, 0); err != nil {
+		return stdin, stdout, stderr, fmt.Errorf("failed to create shim exit fifo: %s", err.Error())
+	}
+
+	path = filepath.Join(root, "stderr")
+	if err = syscall.Mkfifo(path, 0700); err != nil {
+		return stdin, stdout, stderr, fmt.Errorf("failed to create shim exit fifo: %s", err.Error())
+	}
+	if stderr, err = os.OpenFile(path, syscall.O_RDONLY|syscall.O_NONBLOCK, 0); err != nil {
+		return stdin, stdout, stderr, fmt.Errorf("failed to create shim exit fifo: %s", err.Error())
+	}
+
+	return stdin, stdout, stderr, nil
 }
 
 func getControlPipes(root string) (exitPipe *os.File, controlPipe *os.File, err error) {

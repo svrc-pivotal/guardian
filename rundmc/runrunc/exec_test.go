@@ -36,6 +36,7 @@ var _ = Describe("Execer", func() {
 		execer = runrunc.NewExecer(
 			execPreparer,
 			execRunner,
+			execRunner,
 		)
 	})
 

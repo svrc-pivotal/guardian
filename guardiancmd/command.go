@@ -159,6 +159,7 @@ type GuardianCommand struct {
 
 	Bin struct {
 		Dadoo           FileFlag `long:"dadoo-bin"     required:"true" description:"Path to the 'dadoo' binary."`
+		Containerd      FileFlag `long:"containerd-bin"     required:"true" description:"Path to the 'containerd-shim' binary."`
 		NSTar           FileFlag `long:"nstar-bin"     required:"true" description:"Path to the 'nstar' binary."`
 		Tar             FileFlag `long:"tar-bin"       required:"true" description:"Path to the 'tar' binary."`
 		IPTables        FileFlag `long:"iptables-bin"  default:"/sbin/iptables" description:"path to the iptables binary"`
@@ -623,6 +624,12 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 		runcPath,
 		runrunc.NewExecPreparer(&goci.BndlLoader{}, runrunc.LookupFunc(runrunc.LookupUser), chrootMkdir, NonRootMaxCaps),
 		containerd.NewExecRunner(
+			"/path/to/bin",
+			runcPath,
+			cmd.wireUidGenerator(),
+			pidFileReader,
+			linux_command_runner.New()),
+		dadoo.NewExecRunner(
 			dadooPath,
 			runcPath,
 			cmd.wireUidGenerator(),

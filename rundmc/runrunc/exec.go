@@ -54,14 +54,16 @@ type ProcessTracker interface {
 }
 
 type Execer struct {
-	preparer ExecPreparer
-	runner   ExecRunner
+	preparer         ExecPreparer
+	containerdRunner ExecRunner
+	runner           ExecRunner
 }
 
-func NewExecer(execPreparer ExecPreparer, runner ExecRunner) *Execer {
+func NewExecer(execPreparer ExecPreparer, containerdRunner, runner ExecRunner) *Execer {
 	return &Execer{
-		preparer: execPreparer,
-		runner:   runner,
+		preparer:         execPreparer,
+		runner:           runner,
+		containerdRunner: containerdRunner,
 	}
 }
 
