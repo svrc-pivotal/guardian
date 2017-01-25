@@ -37,8 +37,8 @@ func main() {
 func run() int {
 	flag.Parse()
 
-	runtime := flag.Args()[1] // e.g. runc
-	dir := flag.Args()[2]     // bundlePath for run, processPath for exec
+	runtime := flag.Args()[1]     // e.g. runc
+	processPath := flag.Args()[2] // bundlePath for run, processPath for exec
 	containerId := flag.Args()[3]
 
 	signals := make(chan os.Signal, 100)
@@ -48,17 +48,20 @@ func run() int {
 	logFile := fmt.Sprintf("/proc/%d/fd/4", os.Getpid())
 	logFD := os.NewFile(4, "/proc/self/fd/4")
 	syncPipe := os.NewFile(5, "/proc/self/fd/5")
-	pidFilePath := filepath.Join(dir, "pidfile")
-	ttySocketPath := filepath.Join(dir, "tty.sock")
+	pidFilePath := filepath.Join(processPath, "pidfile")
 
-	stdin, stdout, stderr, winsz := openPipes(dir)
+	stdin, stdout, stderr, winsz := openPipes(processPath)
 
 	syncPipe.Write([]byte{0})
 
 	var runcStartCmd *exec.Cmd
 	consoleReady := make(chan bool)
 	if *tty {
-		setupTTYSocket(stdin, stdout, pidFilePath, winsz, ttySocketPath, consoleReady)
+		ttySocketPath, err := setupTTYSocket(stdin, stdout, pidFilePath, winsz, processPath, consoleReady)
+		if err != nil {
+			killProcess(pidFilePath)
+			panic(err)
+		}
 		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-d", "-tty", "-console-socket", ttySocketPath, "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-pid-file", pidFilePath, containerId)
 	} else {
 		runcStartCmd = exec.Command(runtime, "-debug", "-log", logFile, "exec", "-p", fmt.Sprintf("/proc/%d/fd/0", os.Getpid()), "-d", "-pid-file", pidFilePath, containerId)
@@ -91,10 +94,10 @@ func run() int {
 	containerPid, err := parsePid(pidFilePath)
 	check(err)
 
-	return waitForContainerToExit(dir, containerPid, signals)
+	return waitForContainerToExit(processPath, containerPid, signals)
 }
 
-func waitForContainerToExit(dir string, containerPid int, signals chan os.Signal) (exitCode int) {
+func waitForContainerToExit(processPath string, containerPid int, signals chan os.Signal) (exitCode int) {
 	for range signals {
 		for {
 			var status syscall.WaitStatus
@@ -112,7 +115,7 @@ func waitForContainerToExit(dir string, containerPid int, signals chan os.Signal
 
 				ioWg.Wait() // wait for full output to be collected
 
-				check(ioutil.WriteFile(filepath.Join(dir, "exitcode"), []byte(strconv.Itoa(exitCode)), 0700))
+				check(ioutil.WriteFile(filepath.Join(processPath, "exitcode"), []byte(strconv.Itoa(exitCode)), 0700))
 				return exitCode
 			}
 		}
@@ -121,12 +124,12 @@ func waitForContainerToExit(dir string, containerPid int, signals chan os.Signal
 	panic("ran out of signals") // cant happen
 }
 
-func openPipes(dir string) (io.Reader, io.Writer, io.Writer, io.Reader) {
-	stdin := openFifo(filepath.Join(dir, "stdin"), os.O_RDONLY)
-	stdout := openFifo(filepath.Join(dir, "stdout"), os.O_WRONLY|os.O_APPEND)
-	stderr := openFifo(filepath.Join(dir, "stderr"), os.O_WRONLY|os.O_APPEND)
-	winsz := openFifo(filepath.Join(dir, "winsz"), os.O_RDWR)
-	openFifo(filepath.Join(dir, "exit"), os.O_RDWR) // open just so guardian can detect it being closed when we exit
+func openPipes(processPath string) (io.Reader, io.Writer, io.Writer, io.Reader) {
+	stdin := openFifo(filepath.Join(processPath, "stdin"), os.O_RDONLY)
+	stdout := openFifo(filepath.Join(processPath, "stdout"), os.O_WRONLY|os.O_APPEND)
+	stderr := openFifo(filepath.Join(processPath, "stderr"), os.O_WRONLY|os.O_APPEND)
+	winsz := openFifo(filepath.Join(processPath, "winsz"), os.O_RDWR)
+	openFifo(filepath.Join(processPath, "exit"), os.O_RDWR) // open just so guardian can detect it being closed when we exit
 
 	return stdin, stdout, stderr, winsz
 }
@@ -141,18 +144,24 @@ func openFifo(path string, flags int) io.ReadWriter {
 	return r
 }
 func setupTTYSocket(stdin io.Reader, stdout io.Writer, pidFilePath string,
-	winszFifo io.Reader, socketPath string, consoleReady chan bool) {
-	//create the socket
-	l, err := net.Listen("unix", socketPath)
+	winszFifo io.Reader, processPath string, consoleReady chan bool) (string, error) {
+	//create the socket in a unique dir in the parent dir so that it is not too long
+	sockDir, _ := ioutil.TempDir(filepath.Dir(processPath), "")
+	ttySockPath := filepath.Join(sockDir, "sock")
+	l, err := net.Listen("unix", ttySockPath)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	//go to the background and set master
-	go func(ln net.Listener) {
-		//for {
-		// We only accept a single connection, since we can only really have
-		// one reader for os.Stdin. Plus this is all a PoC.
+	go func(ln net.Listener) (err error) {
+		defer func() {
+			if err != nil {
+				killProcess(filepath.Join(processPath, "pidfile"))
+			}
+			close(consoleReady)
+		}()
+
 		conn, err := ln.Accept()
 		if err != nil {
 			return
@@ -179,12 +188,14 @@ func setupTTYSocket(stdin io.Reader, stdout io.Writer, pidFilePath string,
 		if err != nil {
 			return
 		}
+
+		os.RemoveAll(ttySockPath)
 		setupTty(master, nil, stdin, stdout, pidFilePath, winszFifo)
 
-		close(consoleReady)
+		return
 	}(l)
 
-	return
+	return ttySockPath, nil
 }
 
 func setupTty(m, s *os.File, stdin io.Reader, stdout io.Writer, pidFilePath string,
@@ -208,8 +219,13 @@ func setupTty(m, s *os.File, stdin io.Reader, stdout io.Writer, pidFilePath stri
 			dadoo.SetWinSize(m, winSize)
 		}
 	}()
+}
 
-	return
+func killProcess(pidFilePath string) {
+	pid, err := readPid(pidFilePath)
+	if err == nil {
+		syscall.Kill(pid, syscall.SIGKILL)
+	}
 }
 
 func readPid(pidFilePath string) (int, error) {
