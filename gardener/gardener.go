@@ -237,7 +237,7 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 			RootFS:     rootFSURL,
 			QuotaSize:  int64(spec.Limits.Disk.ByteHard),
 			QuotaScope: spec.Limits.Disk.Scope,
-			Namespaced: !spec.Privileged,
+			Namespaced: false,
 		})
 		if err != nil {
 			return nil, err
@@ -248,7 +248,7 @@ func (g *Gardener) Create(spec garden.ContainerSpec) (ctr garden.Container, err 
 		Handle:     spec.Handle,
 		RootFSPath: rootFSPath,
 		Hostname:   spec.Handle,
-		Privileged: spec.Privileged,
+		Privileged: true,
 		BindMounts: spec.BindMounts,
 		Limits:     spec.Limits,
 		Env:        append(env, spec.Env...),

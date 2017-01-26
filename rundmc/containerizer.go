@@ -3,6 +3,8 @@ package rundmc
 import (
 	"fmt"
 	"io"
+	"os"
+	"time"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 
@@ -158,6 +160,7 @@ func (c *Containerizer) Attach(log lager.Logger, handle string, processID string
 
 // StreamIn streams files in to the container
 func (c *Containerizer) StreamIn(log lager.Logger, handle string, spec garden.StreamInSpec) error {
+	start := time.Now()
 	log = log.Session("stream-in", lager.Data{"handle": handle})
 
 	log.Info("started")
@@ -172,6 +175,17 @@ func (c *Containerizer) StreamIn(log lager.Logger, handle string, spec garden.St
 	if err := c.nstar.StreamIn(log, state.Pid, spec.Path, spec.User, spec.TarStream); err != nil {
 		log.Error("nstar-failed", err)
 		return fmt.Errorf("stream-in: nstar: %s", err)
+	}
+
+	file, err := os.OpenFile("/tmp/perf", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0700)
+	if err != nil {
+		fmt.Errorf("OUT FAULT - %s", err.Error())
+	}
+
+	duration := time.Now().Sub(start)
+	_, err = file.WriteString(fmt.Sprintf(",%f\n", duration.Seconds()))
+	if err != nil {
+		fmt.Errorf("OUT FAULT - %s", err.Error())
 	}
 
 	return nil
