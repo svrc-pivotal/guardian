@@ -44,7 +44,7 @@ func run() int {
 	signals := make(chan os.Signal, 100)
 	signal.Notify(signals, syscall.SIGCHLD)
 
-	fd3 := os.NewFile(3, "/proc/self/fd/3")
+	containerExitPipe := os.NewFile(3, "/proc/self/fd/3")
 	logFile := fmt.Sprintf("/proc/%d/fd/4", os.Getpid())
 	logFD := os.NewFile(4, "/proc/self/fd/4")
 	syncPipe := os.NewFile(5, "/proc/self/fd/5")
@@ -75,7 +75,7 @@ func run() int {
 	system.SetSubreaper(os.Getpid())
 
 	if err := runcStartCmd.Start(); err != nil {
-		fd3.Write([]byte{2})
+		containerExitPipe.Write([]byte{2})
 		return 2
 	}
 
@@ -86,7 +86,7 @@ func run() int {
 	check(err)    // Start succeeded but Wait4 failed, this can only be a programmer error
 	logFD.Close() // No more logs from runc so close fd
 
-	fd3.Write([]byte{byte(status.ExitStatus())})
+	containerExitPipe.Write([]byte{byte(status.ExitStatus())})
 	if status.ExitStatus() != 0 {
 		return 3 // nothing to wait for, container didn't launch
 	}
