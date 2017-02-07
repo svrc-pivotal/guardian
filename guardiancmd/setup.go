@@ -11,23 +11,34 @@ import (
 	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 )
 
+//go:generate counterfeiter . SystemConfigurer
+type SystemConfigurer interface {
+	Start([]gardener.Starter) error
+}
+
+type linuxSystemConfigurer struct{}
+
+func (l *linuxSystemConfigurer) start(starters []gardener.Starter) error {
+	return nil
+}
+
 type SetupCommand struct {
-	Logger LagerFlag
-	Tag    string `long:"tag" description:"Optional 2-character identifier used for namespacing global configuration."`
+	Logger           LagerFlag
+	Tag              string `long:"tag" description:"Optional 2-character identifier used for namespacing global configuration."`
+	SystemConfigurer SystemConfigurer
 }
 
 func (c *SetupCommand) Execute(args []string) error {
-	logger, _ := c.Logger.Logger("guardian")
+	// logger, _ := c.Logger.Logger("guardian")
 
-	cgroupStarter := wireRunDMCStarter(logger, c.Tag)
+	// cgroupStarter := wireRunDMCStarter(logger, c.Tag)
 
-	starters := []gardener.Starter{cgroupStarter}
-
-	for _, s := range starters {
-		if err := s.Start(); err != nil {
-			panic(err)
-		}
-	}
+	//c.SystemConfigurer.Start([]gardener.Starter{})
+	// for _, s := range c.starters {
+	// 	if err := s.start(); err != nil {
+	// 		panic(err)
+	// 	}
+	// }
 
 	return nil
 }
