@@ -38,7 +38,12 @@ var _ = Describe("gdn setup", func() {
 		Expect(mountpointCmd.Run()).To(Succeed())
 	})
 
-	It("sets up iptables", func() {})
+	It("sets up iptables", func() {
+		out, err := exec.Command("iptables", "-nvL").CombinedOutput()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(out)).To(ContainSubstring("weird"))
+
+	})
 })
 
 var _ = Describe("running gdn setup before starting server", func() {
