@@ -15,13 +15,17 @@ import (
 )
 
 type SetupCommand struct {
-	LogLevel                   LagerFlag
-	Logger                     lager.Logger
-	Tag                        string     `long:"tag" description:"Optional 2-character identifier used for namespacing global configuration."`
-	DestroyContainersOnStartup bool       `long:"destroy-containers-on-startup" description:"Clean up all the existing containers on startup."`
-	IPTables                   FileFlag   `long:"iptables-bin"  default:"/sbin/iptables" description:"path to the iptables binary"`
-	DenyNetworks               []CIDRFlag `long:"deny-network"      description:"Network ranges to which traffic from containers will be denied. Can be specified multiple times."`
-	AllowHostAccess            bool       `long:"allow-host-access" description:"Allow network access to the host machine."`
+	LogLevel LagerFlag
+	Logger   lager.Logger
+
+	Tag string `hidden:"true" long:"tag" description:"Optional 2-character identifier used for namespacing global configuration."`
+
+	Network struct {
+		IPTables           FileFlag   `long:"iptables-bin"  default:"/sbin/iptables" description:"path to the iptables binary"`
+		AllowHostAccess    bool       `long:"allow-host-access" description:"Allow network access to the host machine."`
+		DenyNetworks       []CIDRFlag `long:"deny-network"      description:"Network ranges to which traffic from containers will be denied. Can be specified multiple times."`
+		ResetIPTablesRules bool       `long:"reset-iptables-rules" description:"Clears all garden-created iptables rules. Don’t use this unless you plan to destroy all containers."`
+	}
 }
 
 func (cmd *SetupCommand) Execute(args []string) error {
@@ -63,7 +67,7 @@ func (cmd *SetupCommand) wireCgroupStarter() gardener.Starter {
 
 func (cmd *SetupCommand) wireIPTablesStarter() gardener.Starter {
 	var denyNetworksList []string
-	for _, network := range cmd.DenyNetworks {
+	for _, network := range cmd.Network.DenyNetworks {
 		denyNetworksList = append(denyNetworksList, network.String())
 	}
 
@@ -71,8 +75,8 @@ func (cmd *SetupCommand) wireIPTablesStarter() gardener.Starter {
 	chainPrefix := fmt.Sprintf("w-%s-", cmd.Tag)
 	iptRunner := &logging.Runner{CommandRunner: linux_command_runner.New(), Logger: cmd.Logger.Session("iptables-runner")}
 	locksmith := &locksmithpkg.FileSystem{}
-	ipTables := iptables.New(cmd.IPTables.Path(), "iptables-restore-not-used", iptRunner, locksmith, chainPrefix)
-	ipTablesStarter := iptables.NewStarter(ipTables, cmd.AllowHostAccess, interfacePrefix, denyNetworksList, cmd.DestroyContainersOnStartup)
+	ipTables := iptables.New(cmd.Network.IPTables.Path(), "iptables-restore-not-used", iptRunner, locksmith, chainPrefix)
+	ipTablesStarter := iptables.NewStarter(ipTables, cmd.Network.AllowHostAccess, interfacePrefix, denyNetworksList, cmd.Network.ResetIPTablesRules)
 
 	return ipTablesStarter
 }
