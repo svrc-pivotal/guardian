@@ -181,7 +181,8 @@ var _ = Describe("gdn setup", func() {
 
 		Context("when server is running as root", func() {
 			JustBeforeEach(func() {
-				server = startGardenAsUser(nil, serverArgs...)
+				root := &syscall.Credential{Uid: 0, Gid: 0}
+				server = startGardenAsUser(root, serverArgs...)
 				Expect(server).NotTo(BeNil())
 			})
 
