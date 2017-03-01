@@ -1,7 +1,6 @@
 package runrunc
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -221,9 +220,9 @@ func (r *execPreparer) lookupUser(bndl goci.Bndl, rootfsPath, username string) (
 }
 
 func (r *execPreparer) ensureDirExists(rootfsPath, dir string, uid, gid int) error {
-	if err := r.mkdirer.MkdirAs(rootfsPath, uid, gid, 0755, false, dir); err != nil {
-		return fmt.Errorf("create working directory: %s", err)
-	}
+	// if err := r.mkdirer.MkdirAs(rootfsPath, uid, gid, 0755, false, dir); err != nil {
+	// 	return fmt.Errorf("create working directory: %s", err)
+	// }
 
 	return nil
 }

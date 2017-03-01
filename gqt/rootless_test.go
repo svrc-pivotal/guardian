@@ -15,6 +15,7 @@ import (
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/guardian/gqt/runner"
+	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 )
 
@@ -85,5 +86,87 @@ var _ = Describe("rootless containers", func() {
 			_, err := client.Create(garden.ContainerSpec{})
 			Expect(err).NotTo(HaveOccurred())
 		})
+	})
+
+	Describe("running a process in a container", func() {
+		var container garden.Container
+
+		BeforeEach(func() {
+			var err error
+
+			container, err = client.Create(garden.ContainerSpec{})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns the correct exit code", func() {
+			processSpec := garden.ProcessSpec{
+				Path: "sh",
+				Args: []string{
+					"-c",
+					"exit 13",
+				},
+			}
+
+			process, err := container.Run(processSpec, garden.ProcessIO{})
+			Expect(err).NotTo(HaveOccurred())
+
+			exitCode, err := process.Wait()
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(exitCode).To(Equal(13))
+		})
+
+		It("receives stdin", func() {
+			processSpec := garden.ProcessSpec{
+				Path: "sh",
+				Args: []string{
+					"-c",
+					"cat <&0",
+				},
+			}
+
+			stdin := gbytes.BufferWithBytes([]byte("hello"))
+			stdout := gbytes.NewBuffer()
+			process, err := container.Run(processSpec, garden.ProcessIO{Stdin: stdin, Stdout: stdout})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(stdout).Should(gbytes.Say("hello"))
+
+			stdin.Close()
+			_, err = process.Wait()
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns stdout", func() {
+			processSpec := garden.ProcessSpec{
+				Path: "echo",
+				Args: []string{
+					"rootlessFTW",
+				},
+			}
+
+			stdout := gbytes.NewBuffer()
+			_, err := container.Run(processSpec, garden.ProcessIO{Stdout: stdout})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(stdout).Should(gbytes.Say("rootlessFTW"))
+		})
+
+		It("returns stderr", func() {
+			processSpec := garden.ProcessSpec{
+				Path: "sh",
+				Args: []string{
+					"-c",
+					"1>&2 echo rootlessErrFTW ",
+				},
+			}
+
+			stderr := gbytes.NewBuffer()
+			_, err := container.Run(processSpec, garden.ProcessIO{Stderr: stderr})
+			Expect(err).NotTo(HaveOccurred())
+
+			Eventually(stderr).Should(gbytes.Say("rootlessErrFTW"))
+		})
+
 	})
 })

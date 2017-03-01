@@ -31,7 +31,16 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 	logFilePath := filepath.Join(bundlePath, "create.log")
 	pidFilePath := filepath.Join(bundlePath, "pidfile")
 
+	f, err := os.Create("/tmp/out")
+	defer f.Close()
+	if err != nil {
+		return err
+	}
+
 	cmd := exec.Command(c.runcPath, "--debug", "--log", logFilePath, "create", "--no-new-keyring", "--bundle", bundlePath, "--pid-file", pidFilePath, id)
+	cmd.Stdin = f
+	cmd.Stdout = f
+	cmd.Stderr = f
 
 	log.Info("creating", lager.Data{
 		"runc":        c.runcPath,
@@ -41,7 +50,7 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 		"pidFilePath": pidFilePath,
 	})
 
-	err := c.commandRunner.Run(cmd)
+	err = c.commandRunner.Run(cmd)
 
 	defer func() {
 		theErr = processLogs(log, logFilePath, err)
