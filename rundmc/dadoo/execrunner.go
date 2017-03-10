@@ -357,7 +357,8 @@ func processLogs(log lager.Logger, logs io.Reader, err error, logTag, logLinePre
 	buff, readErr := ioutil.ReadAll(logs)
 
 	if readErr != nil {
-		return fmt.Errorf("start: read log file: %s", readErr)
+		log.Error("runc run error:", fmt.Errorf("error reading log file: %s", readErr))
+		return err
 	}
 
 	forwardLogsToLager(log, buff, logTag)

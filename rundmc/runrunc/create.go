@@ -53,12 +53,14 @@ func (c *Creator) Create(log lager.Logger, bundlePath, id string, _ garden.Proce
 func processLogs(log lager.Logger, logFilePath string, upstreamErr error) error {
 	logReader, err := os.OpenFile(logFilePath, os.O_RDONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("runc create: open log file '%s': %s", logFilePath, err)
+		log.Error("runc create:", fmt.Errorf("failed to open log file '%s': %s", logFilePath, err))
+		return upstreamErr
 	}
 
 	buff, readErr := ioutil.ReadAll(logReader)
 	if readErr != nil {
-		return fmt.Errorf("runc create: read log file: %s", readErr)
+		log.Error("runc create:", fmt.Errorf("read log file: %s", readErr))
+		return upstreamErr
 	}
 
 	forwardRuncLogsToLager(log, buff)

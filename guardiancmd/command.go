@@ -259,11 +259,6 @@ func (cmd *ServerCommand) Execute([]string) error {
 	// see if we have any compiled assets here and perform additional setup
 	// (e.g. updating bin paths to point to the compiled assets) if required
 	if len(bindata.AssetNames()) > 0 {
-		if !runningAsRoot() {
-			fmt.Fprintln(os.Stderr, "server must be run as root")
-			os.Exit(1)
-		}
-
 		depotDir := cmd.Containers.Dir
 		err := os.MkdirAll(depotDir, 0755)
 		if err != nil {
@@ -276,8 +271,14 @@ func (cmd *ServerCommand) Execute([]string) error {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+		logger.Info("RestoredAssestsDir:" + restoredAssetsDir)
 
-		cmd.Bin.Runc = filepath.Join(restoredAssetsDir, "bin", "runc")
+		if !runningAsRoot() {
+			cmd.Bin.Runc = filepath.Join(restoredAssetsDir, "bin", "runc-rootless")
+		} else {
+			cmd.Bin.Runc = filepath.Join(restoredAssetsDir, "bin", "runc")
+		}
+
 		cmd.Bin.Dadoo = FileFlag(filepath.Join(restoredAssetsDir, "bin", "dadoo"))
 		cmd.Bin.Init = FileFlag(filepath.Join(restoredAssetsDir, "bin", "init"))
 		cmd.Bin.NSTar = FileFlag(filepath.Join(restoredAssetsDir, "bin", "nstar"))
@@ -296,29 +297,19 @@ func runningAsRoot() bool {
 }
 
 func restoreUnversionedAssets(assetsDir string) (string, error) {
-	okMarker := filepath.Join(assetsDir, "ok")
+	linuxAssetsDir := filepath.Join(assetsDir, "linux")
 
-	_, err := os.Stat(okMarker)
+	_, err := os.Stat(linuxAssetsDir)
 	if err == nil {
-		return "", nil
+		return linuxAssetsDir, nil
 	}
 
 	err = bindata.RestoreAssets(assetsDir, "linux")
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
-	ok, err := os.Create(okMarker)
-	if err != nil {
-		return "", nil
-	}
-
-	err = ok.Close()
-	if err != nil {
-		return "", nil
-	}
-
-	return filepath.Join(assetsDir, "linux"), nil
+	return linuxAssetsDir, nil
 }
 
 func (cmd *ServerCommand) Run(signals <-chan os.Signal, ready chan<- struct{}) error {
