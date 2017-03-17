@@ -481,16 +481,16 @@ func (cmd *ServerCommand) wireNetworker(log lager.Logger, propManager kawasaki.C
 
 	if cmd.Network.Plugin.Path() != "" {
 		resolvConfigurer := &kawasaki.ResolvConfigurer{
-			HostsFileCompiler:  &dns.HostsFileCompiler{},
-			ResolvFileCompiler: &dns.ResolvFileCompiler{},
-			FileWriter:         &dns.RootfsWriter{},
-			IDMapReader:        &kawasaki.RootIdMapReader{},
+			HostsFileCompiler:     &dns.HostsFileCompiler{},
+			ResolvFileCompiler:    &dns.ResolvFileCompiler{},
+			FileWriter:            &dns.RootfsWriter{},
+			NameserversDeterminer: &dns.NameserversDeterminer{},
+			IDMapReader:           &kawasaki.RootIdMapReader{},
 		}
 		externalNetworker := netplugin.New(
 			linux_command_runner.New(),
 			propManager,
 			externalIP,
-			dnsServers,
 			resolvConfigurer,
 			cmd.Network.Plugin.Path(),
 			cmd.Network.PluginExtraArgs,
