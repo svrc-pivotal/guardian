@@ -13,6 +13,7 @@ import (
 	"code.cloudfoundry.org/guardian/kawasaki/kawasakifakes"
 	"code.cloudfoundry.org/guardian/netplugin"
 	"code.cloudfoundry.org/guardian/properties"
+	"code.cloudfoundry.org/lager"
 	"code.cloudfoundry.org/lager/lagertest"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 
@@ -210,97 +211,108 @@ var _ = Describe("ExternalNetworker", func() {
 			Expect(logger).To(gbytes.Say("result.*some-stderr-bytes"))
 		})
 
-		Context("when the external plugin returns a containerIP in properties", func() {
-			BeforeEach(func() {
-				pluginOutput = `{
-					"properties": {
-					  "garden.network.container-ip": "10.255.1.2"
-					},
-					"dns_servers": [
-						"1.2.3.4",
-						"1.2.3.5"
-					]
-				}`
-			})
+		Describe("DNS configuration inside the container", func() {
+			var cfg kawasaki.NetworkConfig
 
-			It("configures DNS inside the container", func() {
+			JustBeforeEach(func() {
+				var (
+					log lager.Logger
+					pid int
+				)
+
 				err := plugin.Network(logger, containerSpec, 42)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(resolvConfigurer.ConfigureCallCount()).To(Equal(1))
-				log, cfg, pid := resolvConfigurer.ConfigureArgsForCall(0)
+				log, cfg, pid = resolvConfigurer.ConfigureArgsForCall(0)
 				Expect(log).To(Equal(logger))
 				Expect(pid).To(Equal(42))
-				Expect(cfg).To(Equal(kawasaki.NetworkConfig{
-					ContainerIP:     net.ParseIP("10.255.1.2"),
-					BridgeIP:        net.ParseIP("10.255.1.2"),
-					ContainerHandle: "some-handle",
-					DNSServers:      []net.IP{net.ParseIP("1.2.3.4"), net.ParseIP("1.2.3.5")},
-				}))
 			})
 
-			Context("when the resolvConfigurer fails", func() {
+			Context("when the external plugin returns a containerIP in properties", func() {
 				BeforeEach(func() {
-					resolvConfigurer.ConfigureReturns(errors.New("banana"))
+					pluginOutput = `{
+						"properties": {
+							"garden.network.container-ip": "10.255.1.2"
+						}
+				  }`
 				})
-				It("returns the error", func() {
-					err := plugin.Network(logger, containerSpec, 42)
 
-					Expect(err).To(MatchError("banana"))
+				It("is configured according to Garden defaults", func() {
+					Expect(cfg).To(Equal(kawasaki.NetworkConfig{
+						ContainerIP:     net.ParseIP("10.255.1.2"),
+						BridgeIP:        net.ParseIP("10.255.1.2"),
+						ContainerHandle: "some-handle",
+						DNSServers:      []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("9.9.9.9")},
+					}))
 				})
 			})
-		})
 
-		Context("but returns an empty array of dns_servers", func() {
-			BeforeEach(func() {
-				pluginOutput = `{
-					"properties": {
-					  "garden.network.container-ip": "10.255.1.2"
-					},
-					"dns_servers": []
-				}`
-			})
+			Context("when the external plugin returns a containerIP in properties and dns_servers", func() {
+				Context("when 0 DNS servers are returned", func() {
+					BeforeEach(func() {
+						pluginOutput = `{
+							"properties": {
+								"garden.network.container-ip": "10.255.1.2"
+							},
+							"dns_servers": []
+						}`
+					})
 
-			It("configures DNS inside the container", func() {
-				err := plugin.Network(logger, containerSpec, 42)
-				Expect(err).NotTo(HaveOccurred())
+					It("is configured using the returned DNS servers", func() {
+						Expect(cfg).To(Equal(kawasaki.NetworkConfig{
+							ContainerIP:     net.ParseIP("10.255.1.2"),
+							BridgeIP:        net.ParseIP("10.255.1.2"),
+							ContainerHandle: "some-handle",
+							DNSServers:      []net.IP{},
+						}))
+					})
+				})
 
-				Expect(resolvConfigurer.ConfigureCallCount()).To(Equal(1))
-				log, cfg, pid := resolvConfigurer.ConfigureArgsForCall(0)
-				Expect(log).To(Equal(logger))
-				Expect(pid).To(Equal(42))
-				Expect(cfg).To(Equal(kawasaki.NetworkConfig{
-					ContainerIP:     net.ParseIP("10.255.1.2"),
-					BridgeIP:        net.ParseIP("10.255.1.2"),
-					ContainerHandle: "some-handle",
-					DNSServers:      []net.IP{},
-				}))
-			})
-		})
+				Context("when 1 DNS server is returned", func() {
+					BeforeEach(func() {
+						pluginOutput = `{
+							"properties": {
+								"garden.network.container-ip": "10.255.1.2"
+							},
+							"dns_servers": [
+								"1.2.3.4"
+							]
+						}`
+					})
 
-		Context("but doesn't return the dns_servers key", func() {
-			BeforeEach(func() {
-				pluginOutput = `{
-					"properties": {
-						"garden.network.container-ip": "10.255.1.2"
-					}
-				}`
-			})
+					It("is configured using the returned DNS servers", func() {
+						Expect(cfg).To(Equal(kawasaki.NetworkConfig{
+							ContainerIP:     net.ParseIP("10.255.1.2"),
+							BridgeIP:        net.ParseIP("10.255.1.2"),
+							ContainerHandle: "some-handle",
+							DNSServers:      []net.IP{net.ParseIP("1.2.3.4")},
+						}))
+					})
+				})
 
-			It("defaults to the DNS servers provided to the netplugin", func() {
-				err := plugin.Network(logger, containerSpec, 42)
-				Expect(err).NotTo(HaveOccurred())
+				Context("when > 1 DNS server is returned", func() {
+					BeforeEach(func() {
+						pluginOutput = `{
+							"properties": {
+								"garden.network.container-ip": "10.255.1.2"
+							},
+							"dns_servers": [
+								"1.2.3.4",
+								"1.2.3.5"
+							]
+						}`
+					})
 
-				Expect(resolvConfigurer.ConfigureCallCount()).To(Equal(1))
-				log, cfg, pid := resolvConfigurer.ConfigureArgsForCall(0)
-				Expect(log).To(Equal(logger))
-				Expect(pid).To(Equal(42))
-				Expect(cfg).To(Equal(kawasaki.NetworkConfig{
-					ContainerIP:     net.ParseIP("10.255.1.2"),
-					BridgeIP:        net.ParseIP("10.255.1.2"),
-					ContainerHandle: "some-handle",
-					DNSServers:      []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("9.9.9.9")},
-				}))
+					It("is configured using the returned DNS servers", func() {
+						Expect(cfg).To(Equal(kawasaki.NetworkConfig{
+							ContainerIP:     net.ParseIP("10.255.1.2"),
+							BridgeIP:        net.ParseIP("10.255.1.2"),
+							ContainerHandle: "some-handle",
+							DNSServers:      []net.IP{net.ParseIP("1.2.3.4"), net.ParseIP("1.2.3.5")},
+						}))
+					})
+				})
 			})
 		})
 
