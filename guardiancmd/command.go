@@ -156,6 +156,13 @@ type GuardianCommand struct {
 		ApparmorProfile            string        `long:"apparmor" description:"Apparmor profile to use for unprivileged container processes"`
 	} `group:"Container Lifecycle"`
 
+        NvidiaGpu struct {
+                Enabled         bool     `long:"enable-nvidia-gpu-support" description:"Expose NVIDIA GPUs devices and drivers to containers."`
+                DriverLocation  DirFlag  `long:"nvidia-drivers" description:"Location of NVIDIA CUDA drivers for bind mounting into containers."`
+                DeviceCount     int64    `long:"gpu-count" default:"0" description:"Number of GPU devices to expose in this cell."`
+                UvmMajorDevice  int64    `long:"uvm-major-device" default:"249" description:"The major device for /dev/nvidia-uvm in this cell."`
+        } `group:"NVIDIA GPU Support (Experimental)"`
+
 	Bin struct {
 		Dadoo           FileFlag `long:"dadoo-bin"     required:"true" description:"Path to the 'dadoo' binary."`
 		NSTar           FileFlag `long:"nstar-bin"     required:"true" description:"Path to the 'nstar' binary."`
@@ -608,6 +615,9 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 			Options: []string{"nosuid", "noexec", "newinstance", "ptmxmode=0666", "mode=0620"}},
 		{Type: "bind", Source: cmd.Bin.Init.Path(), Destination: "/tmp/garden-init", Options: []string{"bind"}},
 	}
+        if cmd.NvidiaGpu.Enabled {
+          mounts = append(mounts, specs.Mount{ Type: "bind", Source: cmd.NvidiaGpu.DriverLocation.Path(), Destination: cmd.NvidiaGpu.DriverLocation.Path(), Options: []string{"bind"}})
+        }
 
 	privilegedMounts := append(mounts,
 		specs.Mount{Type: "proc", Source: "proc", Destination: "/proc", Options: []string{"nosuid", "noexec", "nodev"}},
@@ -644,18 +654,38 @@ func (cmd *GuardianCommand) wireContainerizer(log lager.Logger, depotPath, dadoo
 		{Access: &rwm, Type: &character, Major: majorMinor(fuseDevice.Major), Minor: majorMinor(fuseDevice.Minor), Allow: true},
 	}
 
+        devices := []specs.LinuxDevice{fuseDevice}
+        nvidiaGpuDevices := []specs.LinuxDevice{
+          { Path: "/dev/nvidia-uvm", Type: "c", Major: cmd.NvidiaGpu.UvmMajorDevice, Minor: 0, FileMode: &worldReadWrite },
+          { Path: "/dev/nvidiactl", Type: "c", Major: 195, Minor: 255, FileMode: &worldReadWrite },
+        }
+        for i := 0; i < int(cmd.NvidiaGpu.DeviceCount); i++ {
+          nvidiaGpuDevices = append(nvidiaGpuDevices, 
+             specs.LinuxDevice{ Path: fmt.Sprintf("/dev/nvidia%d", i), Type: "c", Major: 195, Minor: int64(i), FileMode: &worldReadWrite })
+        } 
+
+        if cmd.NvidiaGpu.Enabled {
+          for _, device := range nvidiaGpuDevices {
+            allowedDevices = append(allowedDevices, 
+               specs.LinuxDeviceCgroup{Access: &rwm, Type: &character, Major: majorMinor(device.Major),  Minor: majorMinor(device.Minor), Allow: true})
+          }
+          devices = append(devices, nvidiaGpuDevices...)
+        }
+
 	baseProcess := specs.Process{
 		Capabilities: UnprivilegedMaxCaps,
 		Args:         []string{"/tmp/garden-init"},
 		Cwd:          "/",
 	}
 
+
 	baseBundle := goci.Bundle().
 		WithNamespaces(PrivilegedContainerNamespaces...).
 		WithResources(&specs.LinuxResources{Devices: append([]specs.LinuxDeviceCgroup{denyAll}, allowedDevices...)}).
 		WithRootFS(cmd.Containers.DefaultRootFS).
-		WithDevices(fuseDevice).
+		WithDevices(devices...).
 		WithProcess(baseProcess)
+
 
 	unprivilegedBundle := baseBundle.
 		WithNamespace(goci.UserNamespace).
